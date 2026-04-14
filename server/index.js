@@ -49,8 +49,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Chạy Server (Đây là phần quan trọng giữ cho server luôn chạy)
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+// Export app for Vercel
+module.exports = app;
+
+// Chạy Server (local dev only)
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
