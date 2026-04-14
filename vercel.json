@@ -2,7 +2,6 @@
   "version": 2,
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/build",
-  "framework": "react",
   "functions": {
     "api/index.js": {
       "memory": 1024,
