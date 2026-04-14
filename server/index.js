@@ -31,9 +31,15 @@ app.use(cors({
 app.use(express.json());
 
 // Kết nối Database
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mini-soundcloud')
+const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/mini-soundcloud';
+console.log('🔗 Connecting to MongoDB:', mongoUri.replace(/:[^@]*@/, ':***@')); // Hide password
+
+mongoose.connect(mongoUri)
   .then(() => console.log("✅ DB Connection Successful!"))
-  .catch((err) => console.log("❌ DB Connection Error:", err));
+  .catch((err) => {
+    console.error("❌ DB Connection Error:", err.message);
+    console.error("📍 MONGO_URI:", mongoUri.replace(/:[^@]*@/, ':***@'));
+  });
 
 // Sử dụng Routes
 app.use('/api/auth', authRoute);
