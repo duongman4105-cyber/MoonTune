@@ -7,6 +7,8 @@ const cloudinary = require('../utils/cloudinary');
 const upload = require('../middleware/multer');
 const verifyToken = require('../middleware/auth');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'SECRET_KEY_123';
+
 const getOptionalRequester = async (req) => {
     const tokenHeader = req.headers.token || req.headers.authorization;
     if (!tokenHeader) return null;
@@ -15,7 +17,7 @@ const getOptionalRequester = async (req) => {
     if (!token) return null;
 
     try {
-        const decoded = jwt.verify(token, 'SECRET_KEY_123');
+        const decoded = jwt.verify(token, JWT_SECRET);
         return { id: decoded.id, isAdmin: !!decoded.isAdmin };
     } catch (err) {
         return null;

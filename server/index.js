@@ -47,17 +47,6 @@ mongoose.connect(mongoUri)
     // Không exit - Vercel serverless không support exit
   });
 
-// Middleware: Check DB connection trước khi accept API requests
-app.use('/api', (req, res, next) => {
-  if (!dbConnected) {
-    return res.status(503).json({ 
-      error: 'Database initializing...', 
-      message: 'MongoDB is connecting. Please try again in a moment.' 
-    });
-  }
-  next();
-});
-
 // Sử dụng Routes - setup ngay từ đầu
 app.use('/api/auth', authRoute);
 app.use('/api/users', userRoute);

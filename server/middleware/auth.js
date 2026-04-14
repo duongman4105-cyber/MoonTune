@@ -1,13 +1,15 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'SECRET_KEY_123';
+
 const verifyToken = (req, res, next) => {
   const tokenHeader = req.headers.token || req.headers.authorization;
   if (!tokenHeader) return res.status(401).json('You are not authenticated!');
 
   const token = tokenHeader.startsWith('Bearer ') ? tokenHeader.split(' ')[1] : tokenHeader;
 
-  jwt.verify(token, 'SECRET_KEY_123', (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json('Token is not valid!');
     req.user = user;
     next();

@@ -67,7 +67,8 @@ const Admin = () => {
       try {
         await fetchCore();
       } catch (err) {
-        setError('Không thể tải dữ liệu admin.');
+        const apiMessage = err?.response?.data?.message || err?.response?.data || err?.message;
+        setError(apiMessage ? `Không thể tải dữ liệu admin: ${apiMessage}` : 'Không thể tải dữ liệu admin.');
       } finally {
         setLoading(false);
       }

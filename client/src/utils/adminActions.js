@@ -1,14 +1,15 @@
 import { api } from './api';
 
 export const fetchAdminCore = async (headers) => {
-  const [dashboardRes, usersRes, pendingRes, adsRes, homeRes, allSongsRes, notificationsRes, playsRes, growthRes, engagementRes] = await Promise.all([
+  const [dashboardRes, usersRes, pendingRes, adsRes, notificationsRes] = await Promise.all([
     api.get('/api/admin/dashboard', { headers }),
     api.get('/api/admin/users', { headers }),
     api.get('/api/admin/songs/pending', { headers }),
     api.get('/api/admin/ads', { headers }),
-    api.get('/api/admin/home-config', { headers }),
-    api.get('/api/songs', { headers }),
     api.get('/api/admin/notifications', { headers }),
+  ]);
+
+  const [playsRes, growthRes, engagementRes] = await Promise.allSettled([
     api.get('/api/admin/analytics/plays?period=month', { headers }),
     api.get('/api/admin/analytics/growth', { headers }),
     api.get('/api/admin/analytics/engagement', { headers }),
@@ -19,13 +20,11 @@ export const fetchAdminCore = async (headers) => {
     users: usersRes.data || [],
     pendingSongs: pendingRes.data || [],
     ads: adsRes.data || [],
-    homeConfig: homeRes.data || { sliders: [], featuredSongIds: [] },
-    allSongs: allSongsRes.data || [],
     notifications: notificationsRes.data || [],
     analytics: {
-      plays: playsRes.data || [],
-      growth: growthRes.data || [],
-      engagement: engagementRes.data || [],
+      plays: playsRes.status === 'fulfilled' ? (playsRes.value?.data || []) : [],
+      growth: growthRes.status === 'fulfilled' ? (growthRes.value?.data || []) : [],
+      engagement: engagementRes.status === 'fulfilled' ? (engagementRes.value?.data || []) : [],
     },
   };
 };
