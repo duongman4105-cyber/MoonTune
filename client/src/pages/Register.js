@@ -29,7 +29,9 @@ const Register = () => {
       );
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data || 'Không thể đăng ký. Vui lòng thử lại.');
+      const errorMsg = err.response?.data?.message || err.response?.data || 'Không thể đăng ký. Vui lòng thử lại.';
+      setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      console.error('Register error:', err);
     } finally {
       setLoading(false);
     }

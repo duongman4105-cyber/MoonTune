@@ -26,7 +26,10 @@ const Login = () => {
       );
       navigate('/');
     } catch (err) {
-      setError(err.response?.data || 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.');
+      // Server trả về string hoặc object, xử lý cả hai
+      const errorMsg = err.response?.data?.message || err.response?.data || 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.';
+      setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
