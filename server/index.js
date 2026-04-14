@@ -35,18 +35,21 @@ const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/mini-soundc
 console.log('🔗 Connecting to MongoDB:', mongoUri.replace(/:[^@]*@/, ':***@')); // Hide password
 
 mongoose.connect(mongoUri)
-  .then(() => console.log("✅ DB Connection Successful!"))
+  .then(() => {
+    console.log("✅ DB Connection Successful!");
+    
+    // Chỉ setup routes sau khi MongoDB kết nối thành công
+    app.use('/api/auth', authRoute);
+    app.use('/api/users', userRoute);
+    app.use('/api/songs', songRoute);
+    app.use('/api/admin', adminRoute);
+    app.use('/api/public', publicRoute);
+  })
   .catch((err) => {
     console.error("❌ DB Connection Error:", err.message);
     console.error("📍 MONGO_URI:", mongoUri.replace(/:[^@]*@/, ':***@'));
+    process.exit(1); // Exit if DB connection fails
   });
-
-// Sử dụng Routes
-app.use('/api/auth', authRoute);
-app.use('/api/users', userRoute);
-app.use('/api/songs', songRoute);
-app.use('/api/admin', adminRoute);
-app.use('/api/public', publicRoute);
 
 // Chuẩn hóa lỗi API sang JSON để frontend hiển thị gọn thay vì trang HTML lỗi.
 app.use((err, req, res, next) => {
