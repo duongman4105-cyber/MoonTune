@@ -34,22 +34,36 @@ app.use(express.json());
 const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/mini-soundcloud';
 console.log('🔗 Connecting to MongoDB:', mongoUri.replace(/:[^@]*@/, ':***@')); // Hide password
 
+let dbConnected = false;
+
 mongoose.connect(mongoUri)
   .then(() => {
     console.log("✅ DB Connection Successful!");
-    
-    // Chỉ setup routes sau khi MongoDB kết nối thành công
-    app.use('/api/auth', authRoute);
-    app.use('/api/users', userRoute);
-    app.use('/api/songs', songRoute);
-    app.use('/api/admin', adminRoute);
-    app.use('/api/public', publicRoute);
+    dbConnected = true;
   })
   .catch((err) => {
     console.error("❌ DB Connection Error:", err.message);
     console.error("📍 MONGO_URI:", mongoUri.replace(/:[^@]*@/, ':***@'));
-    process.exit(1); // Exit if DB connection fails
+    // Không exit - Vercel serverless không support exit
   });
+
+// Middleware: Check DB connection trước khi accept API requests
+app.use('/api', (req, res, next) => {
+  if (!dbConnected) {
+    return res.status(503).json({ 
+      error: 'Database initializing...', 
+      message: 'MongoDB is connecting. Please try again in a moment.' 
+    });
+  }
+  next();
+});
+
+// Sử dụng Routes - setup ngay từ đầu
+app.use('/api/auth', authRoute);
+app.use('/api/users', userRoute);
+app.use('/api/songs', songRoute);
+app.use('/api/admin', adminRoute);
+app.use('/api/public', publicRoute);
 
 // Chuẩn hóa lỗi API sang JSON để frontend hiển thị gọn thay vì trang HTML lỗi.
 app.use((err, req, res, next) => {
