@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "build": "npm run build --prefix client"
+  },
   "dependencies": {
     "mongodb": "^7.1.1"
   }
