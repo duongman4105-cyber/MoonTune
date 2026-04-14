@@ -17,7 +17,17 @@ const publicRoute = require('./routes/public');
 const app = express();
 
 // Middleware
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'https://moon-tune-sg5y.vercel.app',
+  process.env.CLIENT_URL // từ .env nếu có
+].filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(express.json());
 
 // Kết nối Database
