@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import { api } from '../utils/api';
-import { DEFAULT_USER_AVATAR } from '../utils/defaults';
+import { APP_LOGO_URL, DEFAULT_USER_AVATAR } from '../utils/defaults';
 
 const Sidebar = () => {
     const { user } = useAuth();
@@ -101,7 +101,7 @@ const Sidebar = () => {
         <aside ref={sidebarRef} className="glass-panel pointer-events-auto fixed inset-y-0 left-0 z-[9999] hidden w-[280px] flex-col px-5 pb-6 pt-5 lg:flex isolate">
             <Link to="/" className="mb-6 flex items-center gap-3 rounded-2xl border border-violet-300/20 bg-white/5 p-3">
                 <img
-                    src="https://cdn-icons-png.flaticon.com/512/2995/2995101.png"
+                    src={APP_LOGO_URL}
                     alt="MOONTUNE logo"
                     className="h-11 w-11 rounded-xl object-cover shadow-lg shadow-cyan-900/50"
                 />
