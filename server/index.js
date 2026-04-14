@@ -11,6 +11,8 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const songRoute = require('./routes/songs');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
+const adminRoute = require('./routes/admin');
+const publicRoute = require('./routes/public');
 
 const app = express();
 
@@ -27,6 +29,25 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mini-soundc
 app.use('/api/auth', authRoute);
 app.use('/api/users', userRoute);
 app.use('/api/songs', songRoute);
+app.use('/api/admin', adminRoute);
+app.use('/api/public', publicRoute);
+
+// Chuẩn hóa lỗi API sang JSON để frontend hiển thị gọn thay vì trang HTML lỗi.
+app.use((err, req, res, next) => {
+  if (!err) return next();
+
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ message: `Upload error: ${err.message}` });
+  }
+
+  if (typeof err.message === 'string' && err.message.toLowerCase().includes('not supported')) {
+    return res.status(400).json({ message: err.message });
+  }
+
+  return res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+  });
+});
 
 // Chạy Server (Đây là phần quan trọng giữ cho server luôn chạy)
 const PORT = process.env.PORT || 5000;

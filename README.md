@@ -126,4 +126,4 @@ npx tailwindcss init -p
 3. Khi deploy lên **Vercel** (Frontend):
    - Vào **Settings** > **Environment Variables**.
    - Thêm Key: `REACT_APP_API_URL`.
-   - Thêm Value: Link Backend trên Render (ví dụ `https://my-app.onrender.com`).
+   - Thêm Value: Link Backend trên Render (`https://my-app.onrender.com`).

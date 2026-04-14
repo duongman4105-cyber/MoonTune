@@ -1,8 +1,26 @@
 const router = require('express').Router();
 const Song = require('../models/Song');
+const User = require('../models/User');
+const UserNotification = require('../models/UserNotification');
+const jwt = require('jsonwebtoken');
 const cloudinary = require('../utils/cloudinary');
 const upload = require('../middleware/multer');
 const verifyToken = require('../middleware/auth');
+
+const getOptionalRequester = async (req) => {
+    const tokenHeader = req.headers.token || req.headers.authorization;
+    if (!tokenHeader) return null;
+
+    const token = tokenHeader.startsWith('Bearer ') ? tokenHeader.split(' ')[1] : tokenHeader;
+    if (!token) return null;
+
+    try {
+        const decoded = jwt.verify(token, 'SECRET_KEY_123');
+        return { id: decoded.id, isAdmin: !!decoded.isAdmin };
+    } catch (err) {
+        return null;
+    }
+};
 
 // 1. Lấy danh sách + TÌM KIẾM + LỌC THEO UPLOADER
 router.get('/', async (req, res) => {
@@ -10,19 +28,36 @@ router.get('/', async (req, res) => {
   const uploaderId = req.query.uploader; // Lấy tham số uploader từ URL
 
   try {
+        const requester = await getOptionalRequester(req);
+
+        const onlyApproved = {
+            $or: [
+                { moderationStatus: 'approved' },
+                { moderationStatus: { $exists: false } },
+            ],
+        };
     let songs;
     if (query) {
-      songs = await Song.find({
-        $or: [
-            { title: { $regex: query, $options: "i" } },
-            { artist: { $regex: query, $options: "i" } }
-        ]
-      }).sort({ createdAt: -1 });
+            songs = await Song.find({
+                $and: [
+                    {
+                        $or: [
+                            { title: { $regex: query, $options: "i" } },
+                            { artist: { $regex: query, $options: "i" } }
+                        ]
+                    },
+                    onlyApproved,
+                ]
+            }).sort({ createdAt: -1 });
     } else if (uploaderId) {
-      // Nếu có uploaderId, chỉ lấy bài hát của người đó
-      songs = await Song.find({ uploader: uploaderId }).sort({ createdAt: -1 });
+            const isOwner = requester?.id && requester.id === uploaderId;
+            if (requester?.isAdmin || isOwner) {
+                songs = await Song.find({ uploader: uploaderId }).sort({ createdAt: -1 });
+            } else {
+                songs = await Song.find({ uploader: uploaderId, ...onlyApproved }).sort({ createdAt: -1 });
+            }
     } else {
-      songs = await Song.find().sort({ createdAt: -1 });
+            songs = await Song.find(onlyApproved).sort({ createdAt: -1 });
     }
     res.status(200).json(songs);
   } catch (err) {
@@ -33,8 +68,12 @@ router.get('/', async (req, res) => {
 // 2. Upload bài hát mới
 router.post('/', verifyToken, upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), async (req, res) => {
     try {
-        const audioFile = req.files['audio'][0];
-        const coverFile = req.files['cover'] ? req.files['cover'][0] : null;
+        const audioFile = req.files?.audio?.[0];
+        const coverFile = req.files?.cover?.[0] || null;
+
+        if (!audioFile) {
+            return res.status(400).json({ message: 'Vui lòng chọn file nhạc trước khi upload.' });
+        }
 
         // Upload Audio lên Cloudinary
         const audioResult = await cloudinary.uploader.upload(audioFile.path, { resource_type: "video", folder: "songs" });
@@ -52,13 +91,37 @@ router.post('/', verifyToken, upload.fields([{ name: 'audio', maxCount: 1 }, { n
             audioUrl: audioResult.secure_url,
             coverImage: coverUrl || "https://via.placeholder.com/300",
             uploader: req.user.id,
-            duration: req.body.duration || 0 // Lưu duration
+            duration: req.body.duration || 0, // Lưu duration
+            moderationStatus: 'pending'
         });
 
         const savedSong = await newSong.save();
+
+        await UserNotification.create({
+          userId: req.user.id,
+          title: 'Bài hát đã gửi chờ kiểm duyệt',
+          message: `Bài hát "${savedSong.title}" đã được gửi và đang chờ admin kiểm duyệt.`,
+          linkUrl: `/song/${savedSong._id}`,
+          type: 'song-pending-review',
+          isRead: false,
+        });
+
+                const admins = await User.find({ isAdmin: true, isBlocked: { $ne: true } }).select('_id');
+                if (admins.length > 0) {
+                    const adminNotifications = admins.map((admin) => ({
+                        userId: admin._id,
+                        title: 'Có bài hát mới chờ duyệt',
+                        message: `"${savedSong.title}" vừa được gửi lên hệ thống và đang chờ kiểm duyệt.`,
+                        linkUrl: '/admin',
+                        type: 'system',
+                        isRead: false,
+                    }));
+                    await UserNotification.insertMany(adminNotifications);
+                }
+
         res.status(200).json(savedSong);
     } catch (err) {
-        res.status(500).json(err);
+        res.status(500).json({ message: err.message || 'Tải bài hát thất bại.' });
     }
 });
 
@@ -89,6 +152,7 @@ router.post('/:id/comment', verifyToken, async (req, res) => {
         const newComment = {
             userId: req.user.id,
             username: req.body.username,
+            userAvatar: req.body.userAvatar || '',
             text: req.body.text,
             timestamp: req.body.timestamp || 0
         };
@@ -155,17 +219,35 @@ router.put('/:id/comment/:commentId', verifyToken, async (req, res) => {
 router.post('/:id/comment/:commentId/reply', verifyToken, async (req, res) => {
     try {
         const song = await Song.findById(req.params.id);
+        if (!song) return res.status(404).json("Song not found");
         const comment = song.comments.id(req.params.commentId);
         if (!comment) return res.status(404).json("Comment not found");
 
         const newReply = {
             userId: req.user.id,
             username: req.body.username,
+            userAvatar: req.body.userAvatar || '',
             text: req.body.text,
             createdAt: new Date()
         };
         comment.replies.push(newReply);
         await song.save();
+
+        const createdReply = comment.replies[comment.replies.length - 1];
+        const commentOwnerId = comment.userId ? comment.userId.toString() : '';
+        const replierId = req.user.id;
+
+        if (commentOwnerId && commentOwnerId !== replierId) {
+            await UserNotification.create({
+                userId: commentOwnerId,
+                title: 'Bạn có phản hồi bình luận mới',
+                message: `${req.body.username || 'Một người dùng'} đã trả lời bình luận của bạn trong bài "${song.title}".`,
+                linkUrl: `/song/${song._id}?commentId=${comment._id}&replyId=${createdReply?._id || ''}`,
+                type: 'comment-reply',
+                isRead: false,
+            });
+        }
+
         res.status(200).json(song);
     } catch (err) {
         res.status(500).json(err);
@@ -175,7 +257,24 @@ router.post('/:id/comment/:commentId/reply', verifyToken, async (req, res) => {
 // 6. Lấy chi tiết 1 bài hát
 router.get('/find/:id', async (req, res) => {
     try {
-        const song = await Song.findById(req.params.id);
+                const song = await Song.findById(req.params.id).populate('uploader', '_id username avatar followers');
+                if (!song) return res.status(404).json('Song not found');
+
+                if (song.moderationStatus && song.moderationStatus !== 'approved') {
+                    const requester = await getOptionalRequester(req);
+                    if (!requester?.id) {
+                        return res.status(403).json('Bài hát này đang chờ kiểm duyệt.');
+                    }
+
+                    const uploaderId = typeof song.uploader === 'object'
+                        ? song.uploader?._id?.toString()
+                        : song.uploader?.toString();
+                    const isOwner = uploaderId === requester.id;
+                    if (!requester?.isAdmin && !isOwner) {
+                        return res.status(403).json('Bài hát này đang chờ kiểm duyệt.');
+                    }
+                }
+
         res.status(200).json(song);
     } catch (err) {
         res.status(500).json(err);

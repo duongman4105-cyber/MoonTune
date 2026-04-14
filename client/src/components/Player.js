@@ -1,317 +1,401 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { usePlayer } from '../context/PlayerContext';
-import { FaPlay, FaPause, FaStepForward, FaStepBackward, FaRandom, FaRedo, FaVolumeUp, FaVolumeDown, FaVolumeMute, FaHeart, FaUserPlus, FaList, FaTimes } from 'react-icons/fa';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  FaPlay,
+  FaPause,
+  FaStepForward,
+  FaStepBackward,
+  FaRandom,
+  FaRedo,
+  FaVolumeUp,
+  FaVolumeDown,
+  FaVolumeMute,
+  FaHeart,
+  FaList,
+  FaTimes,
+} from 'react-icons/fa';
+import { usePlayer } from '../context/PlayerContext';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
 
 const Player = () => {
-  const { 
-    currentSong, isPlaying, togglePlay, 
-    playNext, playPrev, isLooping, toggleLoop, isShuffling, toggleShuffle, songList, playSong 
+  const {
+    currentSong,
+    isPlaying,
+    togglePlay,
+    playNext,
+    playPrev,
+    isLooping,
+    toggleLoop,
+    isShuffling,
+    toggleShuffle,
+    songList,
+    playSong,
   } = usePlayer();
-  
+
   const { user, updateUser } = useAuth();
+
   const audioRef = useRef(null);
-  const volumeBarRef = useRef(null); // Ref cho thanh volume
+  const lastHistorySongIdRef = useRef('');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [showQueue, setShowQueue] = useState(false);
-  
-  // State cho Volume
-  const [volume, setVolume] = useState(1); // Mặc định 100%
+  const [volume, setVolume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
-  const [prevVolume, setPrevVolume] = useState(1); // Lưu volume trước khi mute
-  const [isDraggingVolume, setIsDraggingVolume] = useState(false); // Thêm state để kiểm tra đang kéo
+  const [showQueue, setShowQueue] = useState(false);
 
-  // Xử lý Play/Pause khi đổi bài
   useEffect(() => {
-    if (currentSong && audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
+    if (!audioRef.current || !currentSong) return;
+
+    if (isPlaying) {
+      audioRef.current.play().catch(() => {
+        // Browser can block autoplay after song switch.
+      });
+    } else {
+      audioRef.current.pause();
     }
   }, [currentSong, isPlaying]);
 
-  // Xử lý khi hết bài
-  const handleEnded = () => {
-      if (isLooping) {
-          // Nếu đang lặp 1 bài -> Phát lại từ đầu
-          audioRef.current.currentTime = 0;
-          audioRef.current.play();
-      } else {
-          // Nếu không -> Chuyển bài tiếp
-          playNext();
-      }
-  };
+  useEffect(() => {
+    const syncListeningHistory = async () => {
+      if (!currentSong?._id || !user?.token) return;
+      if (lastHistorySongIdRef.current === currentSong._id) return;
 
-  // Cập nhật thời gian thực
-  const handleTimeUpdate = () => {
-    if(audioRef.current) {
-        setCurrentTime(audioRef.current.currentTime);
-        setDuration(audioRef.current.duration || 0);
+      try {
+        await api.put(`/api/users/history/${currentSong._id}`, {}, {
+          headers: { token: `Bearer ${user.token}` },
+        });
+
+        lastHistorySongIdRef.current = currentSong._id;
+        window.dispatchEvent(new CustomEvent('moontune:history-updated'));
+      } catch (error) {
+        // Keep playback uninterrupted even if history sync fails.
+      }
+    };
+
+    syncListeningHistory();
+  }, [currentSong?._id, user?.token]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = isMuted ? 0 : volume;
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const tagName = event.target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea') return;
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        togglePlay();
+      }
+
+      if (event.code === 'ArrowRight') {
+        playNext();
+      }
+
+      if (event.code === 'ArrowLeft') {
+        playPrev();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, playNext, playPrev]);
+
+  const handleLoadedMetadata = () => {
+    if (!audioRef.current) return;
+    const loadedDuration = audioRef.current.duration || 0;
+    setDuration(loadedDuration);
+
+    if (currentSong?._id) {
+      window.dispatchEvent(new CustomEvent('moontune:player-progress', {
+        detail: {
+          songId: currentSong._id,
+          currentTime: audioRef.current.currentTime || 0,
+          duration: loadedDuration,
+          isPlaying,
+        },
+      }));
     }
   };
 
-  // Tua nhạc
-  const handleSeek = (e) => {
-    const seekTime = (e.target.value / 100) * duration;
-    audioRef.current.currentTime = seekTime;
-    setCurrentTime(seekTime);
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    const nextTime = audioRef.current.currentTime || 0;
+    setCurrentTime(nextTime);
+
+    if (currentSong?._id) {
+      window.dispatchEvent(new CustomEvent('moontune:player-progress', {
+        detail: {
+          songId: currentSong._id,
+          currentTime: nextTime,
+          duration,
+          isPlaying,
+        },
+      }));
+    }
   };
 
-  // Xử lý thay đổi Volume (Chung cho Click và Drag)
-  const handleVolumeChange = (e) => {
-      if (!volumeBarRef.current) return;
-      const rect = volumeBarRef.current.getBoundingClientRect();
-      const height = rect.height;
-      const y = e.clientY - rect.top; // Khoảng cách từ đỉnh thanh
-      
-      // Tính % volume (đảo ngược vì y=0 là đỉnh, volume=1)
-      let newVolume = (height - y) / height;
-      
-      // Giới hạn 0 -> 1
-      if (newVolume < 0) newVolume = 0;
-      if (newVolume > 1) newVolume = 1;
-      
-      setVolume(newVolume);
-      if (audioRef.current) audioRef.current.volume = newVolume;
-      setIsMuted(newVolume === 0);
+  const handleSeek = (event) => {
+    if (!audioRef.current) return;
+
+    const progress = Number(event.target.value);
+    const nextTime = (progress / 100) * (duration || 0);
+    audioRef.current.currentTime = nextTime;
+    setCurrentTime(nextTime);
+
+    if (currentSong?._id) {
+      window.dispatchEvent(new CustomEvent('moontune:player-progress', {
+        detail: {
+          songId: currentSong._id,
+          currentTime: nextTime,
+          duration,
+          isPlaying,
+        },
+      }));
+    }
   };
 
-  // Bắt đầu kéo
-  const handleVolumeMouseDown = (e) => {
-      setIsDraggingVolume(true);
-      handleVolumeChange(e); // Cập nhật ngay khi click
+  useEffect(() => {
+    const handleExternalSeek = (event) => {
+      if (!audioRef.current || !currentSong?._id) return;
+
+      const targetSongId = event.detail?.songId;
+      const targetTime = Number(event.detail?.time);
+
+      if (!targetSongId || targetSongId !== currentSong._id) return;
+      if (!Number.isFinite(targetTime)) return;
+
+      const boundedTime = Math.max(0, Math.min(targetTime, duration || targetTime));
+      audioRef.current.currentTime = boundedTime;
+      setCurrentTime(boundedTime);
+
+      window.dispatchEvent(new CustomEvent('moontune:player-progress', {
+        detail: {
+          songId: currentSong._id,
+          currentTime: boundedTime,
+          duration,
+          isPlaying,
+        },
+      }));
+    };
+
+    window.addEventListener('moontune:seek-to', handleExternalSeek);
+    return () => window.removeEventListener('moontune:seek-to', handleExternalSeek);
+  }, [currentSong?._id, duration, isPlaying]);
+
+  useEffect(() => {
+    if (!currentSong?._id) return;
+
+    window.dispatchEvent(new CustomEvent('moontune:player-progress', {
+      detail: {
+        songId: currentSong._id,
+        currentTime,
+        duration,
+        isPlaying,
+      },
+    }));
+  }, [currentSong?._id, currentTime, duration, isPlaying]);
+
+  const handleEnded = () => {
+    if (!audioRef.current) return;
+
+    if (isLooping) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+      return;
+    }
+
+    playNext();
   };
 
-  // Đang kéo
-  const handleVolumeMouseMove = (e) => {
-      if (isDraggingVolume) {
-          handleVolumeChange(e);
-      }
-  };
-
-  // Thả chuột ra
-  const handleVolumeMouseUp = () => {
-      setIsDraggingVolume(false);
-  };
-
-  // Bật/Tắt tiếng
-  const toggleMute = () => {
-      if (isMuted) {
-          setVolume(prevVolume);
-          if (audioRef.current) audioRef.current.volume = prevVolume;
-          setIsMuted(false);
-      } else {
-          setPrevVolume(volume);
-          setVolume(0);
-          if (audioRef.current) audioRef.current.volume = 0;
-          setIsMuted(true);
-      }
-  };
-
-  // Format giây thành phút:giây
   const formatTime = (time) => {
-    if (!time) return "0:00";
+    if (!Number.isFinite(time) || time <= 0) return '0:00';
     const min = Math.floor(time / 60);
     const sec = Math.floor(time % 60);
-    return `${min}:${sec < 10 ? '0' + sec : sec}`;
+    return `${min}:${sec < 10 ? `0${sec}` : sec}`;
   };
+
+  const likedSongIds = useMemo(
+    () => (user?.likedSongs || []).map((item) => (typeof item === 'string' ? item : item?._id)).filter(Boolean),
+    [user?.likedSongs]
+  );
+
+  const isLiked = currentSong ? likedSongIds.includes(currentSong._id) : false;
 
   const handleLike = async () => {
-      if (!user) return alert("Please login to like songs!");
-      if (!currentSong) return;
+    if (!user || !currentSong) return;
 
-      try {
-          const res = await axios.put(`http://localhost:5000/api/users/like/${currentSong._id}`, {}, {
-             headers: { token: `Bearer ${user.token}` }
-          });
-          
-          if (res.data === "Liked") {
-              updateUser({ likedSongs: [...(user.likedSongs || []), currentSong._id] });
-          } else {
-              updateUser({ likedSongs: (user.likedSongs || []).filter(songId => songId !== currentSong._id) });
-          }
-      } catch (err) {
-          console.error(err);
-      }
+    try {
+      await api.put(`/api/users/like/${currentSong._id}`, {}, {
+        headers: { token: `Bearer ${user.token}` },
+      });
+
+      const nextLiked = isLiked
+        ? (user.likedSongs || []).filter((item) => (typeof item === 'string' ? item !== currentSong._id : item?._id !== currentSong._id))
+        : [...(user.likedSongs || []), currentSong._id];
+
+      updateUser({ likedSongs: nextLiked });
+    } catch (error) {
+      // Keep silent to avoid interrupting playback.
+    }
   };
+
+  const volumeIcon = isMuted || volume === 0
+    ? <FaVolumeMute size={16} />
+    : volume < 0.45
+      ? <FaVolumeDown size={16} />
+      : <FaVolumeUp size={16} />;
+
+  const cover = currentSong?.coverImage || currentSong?.thumbnail || 'https://via.placeholder.com/80';
+  const audioSource = currentSong?.audioUrl || currentSong?.fileUrl || currentSong?.songUrl || '';
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   if (!currentSong) return null;
 
-  const isLiked = user?.likedSongs?.includes(currentSong._id);
-
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white text-gray-700 h-[70px] border-t border-[#A5D8FF]/30 flex items-center px-2 md:px-4 z-50 font-sans select-none justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-      <audio 
-        ref={audioRef} 
-        src={currentSong.audioUrl} 
+    <div className="player-shell fixed bottom-0 left-0 right-0 z-50 h-[96px] border-t border-white/10 px-3 py-2 text-white md:h-[106px] md:px-5 lg:left-[280px] lg:px-8">
+      <audio
+        ref={audioRef}
+        src={audioSource}
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
       />
 
-      {/* 1. Nhóm Điều Khiển (Trái) */}
-      <div className="flex items-center gap-4 md:gap-6 w-auto md:w-[240px] justify-start flex-shrink-0">
-        <button onClick={playPrev} className="text-gray-400 hover:text-[#FFB703] transition hidden md:block"><FaStepBackward size={18} /></button>
-        <button 
-          onClick={togglePlay}
-          className="text-[#FFB703] hover:text-orange-400 transition drop-shadow-sm"
-        >
-          {isPlaying ? <FaPause size={32} className="md:w-8 md:h-8" /> : <FaPlay size={32} className="md:w-8 md:h-8" />}
-        </button>
-        <button onClick={playNext} className="text-gray-400 hover:text-[#FFB703] transition"><FaStepForward size={18} /></button>
-        
-        {/* Nút Shuffle */}
-        <button 
-            onClick={toggleShuffle} 
-            className={`transition hidden lg:block ${isShuffling ? 'text-[#FFB703]' : 'text-gray-300 hover:text-[#A5D8FF]'}`}
-            title="Shuffle"
-        >
-            <FaRandom size={16} />
-        </button>
-        
-        {/* Nút Loop */}
-        <button 
-            onClick={toggleLoop} 
-            className={`transition hidden lg:block ${isLooping ? 'text-[#FFB703]' : 'text-gray-300 hover:text-[#A5D8FF]'}`}
-            title="Loop One"
-        >
-            <FaRedo size={16} />
-        </button>
-      </div>
+      <div className="flex h-full items-center gap-3 md:gap-5">
+        <div className="min-w-0 flex w-[36%] items-center gap-3 md:w-[30%]">
+          <Link to={`/song/${currentSong._id}`}>
+            <img src={cover} alt={currentSong.title} className="h-12 w-12 rounded-xl object-cover shadow-lg md:h-14 md:w-14" />
+          </Link>
 
-      {/* 2. Thanh Tiến Trình (Giữa) */}
-      <div className="flex-1 flex items-center gap-4 px-4 hidden md:flex">
-        <span className="text-[#FFB703] text-xs font-bold w-10 text-right">{formatTime(currentTime)}</span>
-        
-        <div className="relative flex-1 h-[4px] bg-[#FAF7F2] rounded-full group cursor-pointer border border-gray-100">
-           <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={duration ? (currentTime / duration) * 100 : 0}
-              onChange={handleSeek}
-              className="absolute w-full h-[12px] -top-[4px] opacity-0 cursor-pointer z-20"
-           />
-           <div className="absolute top-0 left-0 w-full h-full bg-gray-200 rounded-full"></div>
-           <div 
-              className="absolute top-0 left-0 h-full bg-[#FFB703] rounded-full" 
-              style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-           ></div>
-           <div 
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-[#FFB703] border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition z-10 pointer-events-none shadow-sm"
-              style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-           ></div>
-        </div>
-
-        <span className="text-gray-400 text-xs font-medium w-10">{formatTime(duration)}</span>
-        
-        {/* Volume Control */}
-        <div className="relative group ml-2 flex items-center justify-center">
-            <button onClick={toggleMute} className="text-gray-400 hover:text-[#FFB703]">
-                {isMuted || volume === 0 ? <FaVolumeMute size={18} /> : volume < 0.5 ? <FaVolumeDown size={18} /> : <FaVolumeUp size={18} />}
-            </button>
-            
-            {/* Volume Slider Popup (Hiện khi hover) */}
-            <div 
-                className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white p-3 rounded-lg shadow-xl border border-[#A5D8FF]/30 hidden group-hover:flex flex-col items-center w-12 h-32 z-50"
-                onMouseMove={handleVolumeMouseMove}
-                onMouseUp={handleVolumeMouseUp}
-                onMouseLeave={handleVolumeMouseUp}
-            >
-                <div 
-                    ref={volumeBarRef}
-                    className="relative w-1.5 h-24 bg-gray-200 rounded-full flex items-end cursor-pointer"
-                    onMouseDown={handleVolumeMouseDown}
-                >
-                    {/* Phần đã fill */}
-                    <div 
-                        className="w-full bg-[#FFB703] rounded-full pointer-events-none" 
-                        style={{ height: `${(isMuted ? 0 : volume) * 100}%` }}
-                    ></div>
-                    {/* Nút tròn */}
-                    <div 
-                        className="absolute w-3 h-3 bg-[#FFB703] border-2 border-white rounded-full shadow-sm -translate-x-1/2 left-1/2 pointer-events-none"
-                        style={{ bottom: `calc(${(isMuted ? 0 : volume) * 100}% - 6px)` }}
-                    ></div>
-                </div>
-            </div>
-        </div>
-      </div>
-
-      {/* 3. Thông Tin Bài Hát (Phải) */}
-      <div className="flex items-center gap-2 md:gap-4 px-2 md:px-6 w-auto md:w-[360px] justify-end border-l-0 md:border-l border-gray-100 h-full flex-shrink min-w-0 relative">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-            <Link to={`/song/${currentSong._id}`}>
-                <img src={currentSong.coverImage || 'https://via.placeholder.com/40'} alt="cover" className="w-12 h-12 object-cover shadow-md rounded-lg md:rounded-lg hover:opacity-90 transition" />
+          <div className="min-w-0">
+            <Link to={`/song/${currentSong._id}`} className="block truncate text-sm font-bold text-white hover:text-cyan-200 md:text-base">
+              {currentSong.title}
             </Link>
-            
-            <div className="flex flex-col justify-center overflow-hidden">
-                <span className="text-gray-400 text-[10px] md:text-[11px] truncate hover:underline cursor-pointer">{currentSong.artist}</span>
-                <Link to={`/song/${currentSong._id}`} className="text-gray-700 text-xs truncate font-bold hover:text-[#FFB703] cursor-pointer">
-                    {currentSong.title}
-                </Link>
-            </div>
+            <p className="truncate text-xs text-slate-300 md:text-sm">{currentSong.artist || 'Unknown artist'}</p>
+          </div>
+
+          <button
+            onClick={handleLike}
+            className={`hidden md:inline-flex ${isLiked ? 'text-rose-300' : 'text-slate-300 hover:text-rose-300'} transition`}
+            title={isLiked ? 'Bỏ yêu thích' : 'Yêu thích'}
+          >
+            <FaHeart size={16} />
+          </button>
         </div>
 
-        <div className="flex items-center gap-3 md:gap-5 text-gray-400">
-            <button 
-                onClick={handleLike}
-                className={`transition ${isLiked ? 'text-[#FFB703]' : 'hover:text-[#FFB703]'}`}
-                title={isLiked ? "Unlike" : "Like"}
-            >
-                <FaHeart size={18} />
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+          <div className="flex items-center gap-4 md:gap-5">
+            <button onClick={toggleShuffle} className={`hidden md:inline-flex transition ${isShuffling ? 'text-cyan-300' : 'text-slate-400 hover:text-white'}`}>
+              <FaRandom size={15} />
             </button>
-            
-            <button className="hover:text-[#A5D8FF] transition hidden sm:block"><FaUserPlus size={18} /></button>
-            
-            {/* Nút Danh Sách Phát */}
-            <button 
-                onClick={() => setShowQueue(!showQueue)}
-                className={`transition hidden sm:block ${showQueue ? 'text-[#FFB703]' : 'hover:text-[#A5D8FF]'}`}
-                title="Next Up"
-            >
-                <FaList size={18} />
+            <button onClick={playPrev} className="text-slate-300 transition hover:text-white">
+              <FaStepBackward size={16} />
             </button>
+
+            <button
+              onClick={togglePlay}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-[#0c1533] shadow-[0_0_24px_rgba(75,168,255,0.55)] transition hover:scale-105 md:h-11 md:w-11"
+            >
+              {isPlaying ? <FaPause size={14} /> : <FaPlay size={14} className="ml-0.5" />}
+            </button>
+
+            <button onClick={playNext} className="text-slate-300 transition hover:text-white">
+              <FaStepForward size={16} />
+            </button>
+            <button onClick={toggleLoop} className={`hidden md:inline-flex transition ${isLooping ? 'text-cyan-300' : 'text-slate-400 hover:text-white'}`}>
+              <FaRedo size={15} />
+            </button>
+          </div>
+
+          <div className="flex w-full max-w-xl items-center gap-2 md:gap-3">
+            <span className="hidden w-11 text-right text-xs text-slate-400 sm:inline">{formatTime(currentTime)}</span>
+
+            <div className="group relative flex-1">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={progress}
+                onChange={handleSeek}
+                className="absolute inset-0 z-20 h-2 w-full cursor-pointer opacity-0"
+              />
+              <div className="h-1.5 rounded-full bg-slate-700/70">
+                <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-white/80 bg-white opacity-0 transition group-hover:opacity-100" style={{ left: `calc(${progress}% - 6px)` }} />
+            </div>
+
+            <span className="hidden w-11 text-left text-xs text-slate-400 sm:inline">{formatTime(duration)}</span>
+          </div>
         </div>
 
-        {/* POPUP DANH SÁCH PHÁT (QUEUE) */}
-        {showQueue && (
-            <div className="absolute bottom-[80px] right-4 w-80 bg-white shadow-2xl rounded-xl border border-[#A5D8FF]/30 p-4 max-h-[400px] overflow-y-auto z-50 animate-fade-in-up">
-                <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-2">
-                    <h4 className="font-bold text-gray-700 text-sm">Next Up</h4>
-                    <button onClick={() => setShowQueue(false)} className="text-gray-400 hover:text-red-500"><FaTimes /></button>
-                </div>
-                <div className="space-y-2">
-                    {songList.map((song, index) => (
-                        <div 
-                            key={index} 
-                            onClick={() => playSong(song, songList)}
-                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition ${currentSong._id === song._id ? 'bg-[#FAF7F2] border border-[#FFB703]/30' : 'hover:bg-gray-50'}`}
-                        >
-                            <img src={song.coverImage} alt="cover" className="w-10 h-10 rounded object-cover" />
-                            <div className="overflow-hidden">
-                                <p className={`text-xs font-bold truncate ${currentSong._id === song._id ? 'text-[#FFB703]' : 'text-gray-700'}`}>{song.title}</p>
-                                <p className="text-[10px] text-gray-400 truncate">{song.artist}</p>
-                            </div>
-                            {currentSong._id === song._id && <div className="ml-auto text-[#FFB703] text-xs animate-pulse">Playing</div>}
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
+        <div className="flex w-[18%] min-w-[92px] items-center justify-end gap-2 md:w-[20%] md:gap-3">
+          <button onClick={() => setShowQueue((prev) => !prev)} className={`hidden sm:inline-flex transition ${showQueue ? 'text-cyan-300' : 'text-slate-300 hover:text-white'}`}>
+            <FaList size={15} />
+          </button>
+
+          <button
+            onClick={() => setIsMuted((prev) => !prev)}
+            className="text-slate-300 transition hover:text-white"
+          >
+            {volumeIcon}
+          </button>
+
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={isMuted ? 0 : volume}
+            onChange={(event) => {
+              setIsMuted(false);
+              setVolume(Number(event.target.value));
+            }}
+            className="hidden h-1 w-24 cursor-pointer appearance-none rounded-full bg-slate-700 accent-violet-400 md:block"
+          />
+        </div>
       </div>
 
-      {/* Mobile Progress Bar */}
-      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gray-100 md:hidden pointer-events-none">
-        <div 
-            className="h-full bg-[#FFB703]" 
-            style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-        ></div>
+      {showQueue && (
+        <div className="animate-fade-in-up absolute bottom-[110%] right-3 w-80 max-h-[420px] overflow-y-auto rounded-2xl border border-blue-300/25 bg-[#10182f]/95 p-4 shadow-2xl md:right-5 lg:right-8">
+          <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2">
+            <h4 className="text-sm font-bold text-white">Next Up</h4>
+            <button onClick={() => setShowQueue(false)} className="text-slate-400 hover:text-rose-300">
+              <FaTimes size={14} />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {songList.map((song) => {
+              const active = song._id === currentSong._id;
+              return (
+                <button
+                  key={song._id}
+                  onClick={() => playSong(song, songList)}
+                  className={`flex w-full items-center gap-3 rounded-lg border px-2.5 py-2 text-left transition ${active ? 'border-cyan-300/30 bg-cyan-400/10' : 'border-white/5 hover:bg-white/5'}`}
+                >
+                  <img
+                    src={song.coverImage || song.thumbnail || 'https://via.placeholder.com/40'}
+                    alt={song.title}
+                    className="h-10 w-10 rounded object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate text-xs font-bold ${active ? 'text-cyan-200' : 'text-white'}`}>{song.title}</p>
+                    <p className="truncate text-[11px] text-slate-400">{song.artist}</p>
+                  </div>
+                  {active && <span className="text-[10px] font-bold text-cyan-200">Playing</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-slate-700/70 md:hidden">
+        <div className="h-full bg-gradient-to-r from-cyan-400 to-violet-500" style={{ width: `${progress}%` }} />
       </div>
     </div>
   );

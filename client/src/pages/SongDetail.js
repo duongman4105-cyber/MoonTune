@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { usePlayer } from '../context/PlayerContext';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
+import { DEFAULT_USER_AVATAR } from '../utils/defaults';
 import { 
-    FaPlay, FaPause, FaHeart, FaRetweet, FaShareSquare, FaEllipsisH, 
+    FaPlay, FaHeart, FaRetweet, FaShareSquare, FaEllipsisH, 
     FaCommentAlt, FaTrash, FaEdit, FaReply 
 } from 'react-icons/fa';
 
 const SongDetail = () => {
   const { id } = useParams();
+    const location = useLocation();
   const [song, setSong] = useState(null);
-  const { currentSong, isPlaying, playSong, togglePlay, currentTime, duration, handleSeek } = usePlayer();
+    const [fetchError, setFetchError] = useState('');
+        const { currentSong } = usePlayer();
   
   const { user, updateUser } = useAuth();
   const [commentText, setCommentText] = useState("");
@@ -23,19 +26,49 @@ const SongDetail = () => {
 
   const [dominantColor, setDominantColor] = useState('rgb(50, 50, 50)');
   const [waveforms, setWaveforms] = useState([]);
+    const [liveCurrentTime, setLiveCurrentTime] = useState(0);
+    const [liveDuration, setLiveDuration] = useState(0);
+        const [highlightTargetId, setHighlightTargetId] = useState('');
 
   useEffect(() => {
     const fetchSong = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/songs/find/${id}`);
+                                const authToken = user?.token || user?.accessToken;
+                                const config = authToken ? { headers: { token: `Bearer ${authToken}` } } : undefined;
+                const res = await api.get(`/api/songs/find/${id}`, config);
         setSong(res.data);
+                setFetchError('');
       } catch (err) {
-        console.error(err);
+                const message = err?.response?.data?.message || err?.response?.data || 'Không thể tải bài hát này.';
+                setFetchError(typeof message === 'string' ? message : 'Không thể tải bài hát này.');
       }
     };
     fetchSong();
     setWaveforms([...Array(120)].map(() => Math.max(15, Math.random() * 100)));
-  }, [id]);
+        setLiveCurrentTime(0);
+        }, [id, user?.token, user?.accessToken]);
+
+    const songId = song?._id;
+
+    useEffect(() => {
+        if (!songId) return;
+
+        const onProgress = (event) => {
+            const detail = event.detail || {};
+            if (detail.songId !== songId) return;
+
+            if (Number.isFinite(detail.currentTime)) {
+                setLiveCurrentTime(detail.currentTime);
+            }
+
+            if (Number.isFinite(detail.duration) && detail.duration > 0) {
+                setLiveDuration(detail.duration);
+            }
+        };
+
+        window.addEventListener('moontune:player-progress', onProgress);
+        return () => window.removeEventListener('moontune:player-progress', onProgress);
+    }, [songId]);
 
   useEffect(() => {
       if (!song || !song.coverImage) return;
@@ -54,6 +87,33 @@ const SongDetail = () => {
       img.onerror = () => setDominantColor('rgb(50, 50, 50)');
   }, [song]);
 
+  useEffect(() => {
+      if (!song?._id) return;
+
+      const searchParams = new URLSearchParams(location.search);
+      const commentId = searchParams.get('commentId');
+      const replyId = searchParams.get('replyId');
+
+      if (!commentId && !replyId) return;
+
+      const primaryTargetId = replyId ? `reply-${replyId}` : `comment-${commentId}`;
+      const fallbackTargetId = commentId ? `comment-${commentId}` : '';
+
+      const timerId = setTimeout(() => {
+          const targetEl = document.getElementById(primaryTargetId) || (fallbackTargetId ? document.getElementById(fallbackTargetId) : null);
+          if (!targetEl) return;
+
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightTargetId(targetEl.id);
+
+          window.setTimeout(() => {
+              setHighlightTargetId((currentId) => (currentId === targetEl.id ? '' : currentId));
+          }, 2200);
+      }, 140);
+
+      return () => clearTimeout(timerId);
+  }, [song?._id, song?.comments, location.search]);
+
   // Helper format thời gian
   const formatTime = (time) => {
     if (!time) return "0:00";
@@ -64,13 +124,21 @@ const SongDetail = () => {
 
   // Xử lý click vào sóng nhạc để tua
   const handleWaveformClick = (e) => {
-      if (!duration || !isCurrentSong) return;
+            if (!isCurrentSong || !effectiveDuration) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const width = rect.width;
       const percent = x / width;
-      const newTime = percent * duration;
-      handleSeek(newTime); // Gọi hàm tua từ context
+            const newTime = percent * effectiveDuration;
+
+            window.dispatchEvent(new CustomEvent('moontune:seek-to', {
+                detail: {
+                    songId: song._id,
+                    time: newTime,
+                },
+            }));
+
+            setLiveCurrentTime(newTime);
   };
 
   const handleCommentSubmit = async (e) => {
@@ -78,10 +146,11 @@ const SongDetail = () => {
         if (!user) return alert("Vui lòng đăng nhập để bình luận!");
         if (!commentText.trim()) return;
         try {
-            const res = await axios.post(`http://localhost:5000/api/songs/${id}/comment`, {
+            const res = await api.post(`/api/songs/${id}/comment`, {
                 username: user.username,
+                userAvatar: user.avatar || '',
                 text: commentText,
-                timestamp: currentTime // Lưu thời điểm bình luận
+                timestamp: liveCurrentTime // Lưu thời điểm bình luận
             }, {
                 headers: { token: `Bearer ${user.token}` }
             });
@@ -97,7 +166,7 @@ const SongDetail = () => {
   const handleLike = async () => {
       if (!user) return alert("Please login to like songs!");
       try {
-          const res = await axios.put(`http://localhost:5000/api/users/like/${id}`, {}, {
+          const res = await api.put(`/api/users/like/${id}`, {}, {
              headers: { token: `Bearer ${user.token}` }
           });
           if (res.data === "Liked") {
@@ -113,7 +182,7 @@ const SongDetail = () => {
   const handleDeleteComment = async (commentId) => {
       if (!window.confirm("Bạn muốn xóa bình luận này?")) return;
       try {
-          const res = await axios.delete(`http://localhost:5000/api/songs/${id}/comment/${commentId}`, {
+          const res = await api.delete(`/api/songs/${id}/comment/${commentId}`, {
               headers: { token: `Bearer ${user.token}` }
           });
           setSong(res.data);
@@ -126,7 +195,7 @@ const SongDetail = () => {
   const handleEditSubmit = async (commentId) => {
       if (!editText.trim()) return;
       try {
-          const res = await axios.put(`http://localhost:5000/api/songs/${id}/comment/${commentId}`, { text: editText }, { headers: { token: `Bearer ${user.token}` } });
+          const res = await api.put(`/api/songs/${id}/comment/${commentId}`, { text: editText }, { headers: { token: `Bearer ${user.token}` } });
           setSong(res.data);
           setEditingCommentId(null);
       } catch (err) { alert("Lỗi khi sửa comment"); }
@@ -135,227 +204,267 @@ const SongDetail = () => {
   const handleReplySubmit = async (commentId) => {
       if (!replyText.trim()) return;
       try {
-          const res = await axios.post(`http://localhost:5000/api/songs/${id}/comment/${commentId}/reply`, { username: user.username, text: replyText }, { headers: { token: `Bearer ${user.token}` } });
+          const res = await api.post(`/api/songs/${id}/comment/${commentId}/reply`, { username: user.username, userAvatar: user.avatar || '', text: replyText }, { headers: { token: `Bearer ${user.token}` } });
           setSong(res.data);
           setReplyingCommentId(null);
           setReplyText("");
       } catch (err) { alert("Lỗi khi trả lời comment"); }
   };
 
-  if (!song) return <div className="text-gray-500 text-center mt-20">Loading...</div>;
+    if (fetchError) {
+        return <div className="mt-20 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-center text-red-200">{fetchError}</div>;
+    }
 
-  const isCurrentSong = currentSong?._id === song._id;
+    if (!song) return <div className="text-gray-500 text-center mt-20">Loading...</div>;
+
+    const isCurrentSong = currentSong?._id === song._id;
   const isLiked = user?.likedSongs?.includes(song._id);
+    const uploaderName = typeof song?.uploader === 'object' ? song?.uploader?.username : (song?.artist || 'Unknown');
+    const uploaderFollowers = typeof song?.uploader === 'object' ? (song?.uploader?.followers?.length || 0) : 0;
+    const effectiveDuration = liveDuration > 0
+        ? liveDuration
+        : (Number(song?.duration) > 0 ? Number(song.duration) : 0);
+
+    const displayedDuration = effectiveDuration;
+    const coverImage = song.coverImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(song.title || 'Song')}&background=1f2a44&color=fff`;
+    const createdDate = song.createdAt ? new Date(song.createdAt).toLocaleDateString('vi-VN') : 'N/A';
+    const uploaderId = typeof song?.uploader === 'object' ? song?.uploader?._id : song?.uploader;
+    const uploaderAvatar = typeof song?.uploader === 'object' && song?.uploader?.avatar
+        ? song.uploader.avatar
+        : DEFAULT_USER_AVATAR;
 
   return (
-    <div className="bg-[#FAF7F2] min-h-screen text-gray-700 pb-32 font-sans relative">
-      {/* 1. HERO SECTION */}
-      <div 
-        className="p-8 relative overflow-hidden transition-colors duration-700 ease-in-out"
-        style={{ background: `linear-gradient(to bottom, ${dominantColor}, #111)` }}
-      >
-        <div className="max-w-7xl mx-auto flex gap-8 h-[380px]">
-            
-            {/* Left Content */}
-            <div className="flex-1 flex flex-col relative z-10">
-                
-                {/* Top: Play Button & Info */}
-                <div className="flex items-start gap-4 mb-auto pt-4">
-                    <button 
-                        onClick={() => isCurrentSong ? togglePlay() : playSong(song)}
-                        className="w-16 h-16 rounded-full bg-[#f50] flex items-center justify-center hover:scale-105 transition shadow-lg flex-shrink-0 text-white border-2 border-white/20"
-                    >
-                        {isCurrentSong && isPlaying ? <FaPause size={24} /> : <FaPlay size={24} className="ml-1" />}
-                    </button>
-                    
-                    <div className="mt-1">
-                        <h1 className="text-2xl font-normal bg-black/60 px-3 py-1 inline-block mb-2 text-white backdrop-blur-sm">{song.title}</h1>
-                        <br />
-                        <h2 className="text-lg text-gray-300 bg-black/60 px-3 py-1 inline-block backdrop-blur-sm">{song.artist}</h2>
-                    </div>
-                    
-                    <div className="ml-auto text-right">
-                         <span className="text-xs font-bold text-white/80 bg-black/40 px-2 py-1 rounded">1 month ago</span>
-                    </div>
-                </div>
+        <div className="space-y-6 pb-32 text-white">
+            <section
+                className="relative overflow-hidden rounded-3xl border border-white/10 p-6 shadow-[0_26px_60px_rgba(8,10,30,0.5)] sm:p-8"
+                style={{ background: `linear-gradient(120deg, ${dominantColor}88, rgba(17,24,39,0.95) 55%, rgba(15,23,42,0.96))` }}
+            >
+                <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-cyan-300/15 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
 
-                {/* Bottom: Waveform (Clickable) */}
-                <div 
-                    className="relative h-32 w-full flex items-end gap-[1px] mt-8 mb-2 cursor-pointer"
-                    onClick={handleWaveformClick}
-                >
-                    {/* Time Labels */}
-                    <span className="absolute left-0 bottom-1 bg-[#f50] px-1 text-[10px] text-white z-20 font-bold">
-                        {formatTime(isCurrentSong ? currentTime : 0)}
-                    </span>
-                    <span className="absolute right-0 bottom-1 bg-white px-1 text-[10px] text-black z-20 font-bold">
-                        {formatTime(isCurrentSong ? duration : 0)}
-                    </span>
-
-                    {/* Bars */}
-                    {waveforms.map((height, i) => {
-                        const barPercent = (i / waveforms.length) * 100;
-                        const currentPercent = (isCurrentSong && duration) ? (currentTime / duration) * 100 : 0;
-                        const isPlayed = barPercent < currentPercent;
-
-                        return (
-                            <div 
-                                key={i} 
-                                className="flex-1 transition-all duration-75 pointer-events-none"
-                                style={{ 
-                                    height: `${height}%`,
-                                    backgroundColor: isPlayed ? '#f50' : '#fff' 
-                                }}
-                            ></div>
-                        );
-                    })}
-
-                    {/* Comment Avatars */}
-                    {song.comments && song.comments.map((comment, idx) => {
-                        if (!comment.timestamp || !duration) return null;
-                        const leftPos = (comment.timestamp / duration) * 100;
-                        if (leftPos > 100) return null;
-
-                        return (
-                            <div 
-                                key={idx}
-                                className="absolute bottom-0 w-5 h-5 rounded-full border border-white overflow-hidden cursor-pointer group z-30 hover:scale-125 transition hover:z-40 shadow-md"
-                                style={{ left: `${leftPos}%`, marginBottom: '-10px' }}
-                            >
-                                <img 
-                                    src={`https://ui-avatars.com/api/?name=${comment.username}&background=random`} 
-                                    alt={comment.username} 
-                                    className="w-full h-full object-cover"
-                                />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black/90 text-white text-xs px-2 py-1 rounded whitespace-nowrap hidden group-hover:block shadow-lg border border-gray-700 z-50">
-                                    <span className="font-bold text-[#f50]">{comment.username}</span>: {comment.text}
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {/* Right Content: Cover Image */}
-            <div className="w-[340px] h-[340px] flex-shrink-0 shadow-2xl relative group rounded overflow-hidden bg-black border-4 border-white/10">
-                <img src={song.coverImage} alt="cover" className="w-full h-full object-cover opacity-100" />
-            </div>
-        </div>
-      </div>
-
-      {/* 2. ACTION BAR */}
-      <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex gap-3">
-              <button onClick={handleLike} className={`flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm transition ${isLiked ? 'text-[#FFB703] border-[#FFB703]' : 'text-gray-600 hover:border-[#FFB703] hover:text-[#FFB703]'}`}><FaHeart /> {isLiked ? 'Liked' : 'Like'}</button>
-              <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-600 hover:border-[#FFB703] hover:text-[#FFB703] transition"><FaRetweet /> Repost</button>
-              <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-600 hover:border-[#FFB703] hover:text-[#FFB703] transition"><FaShareSquare /> Share</button>
-              <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-600 hover:border-[#FFB703] hover:text-[#FFB703] transition"><FaEllipsisH /> More</button>
-          </div>
-          <div className="flex gap-6 text-gray-400 text-sm font-medium">
-              <span className="flex items-center gap-1"><FaPlay size={12} /> {song.plays}</span>
-              <span className="flex items-center gap-1"><FaHeart size={12} /> {song.likes}</span>
-              <span className="flex items-center gap-1"><FaRetweet size={12} /> 12</span>
-          </div>
-      </div>
-
-      {/* 3. MAIN CONTENT */}
-      <div className="max-w-7xl mx-auto px-8 py-8 flex gap-8">
-          <div className="flex-1">
-              {/* Comment Input */}
-              <div className="flex gap-4 mb-8 bg-white p-4 rounded-xl border border-[#A5D8FF]/30 shadow-sm">
-                  <div className="w-10 h-10 bg-[#A5D8FF] rounded-full overflow-hidden">
-                      <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.username || 'Guest'}&background=random`} alt="me" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 relative">
-                      <input type="text" placeholder="Write a comment (Press Enter to submit)" className="w-full h-10 bg-[#FAF7F2] border border-gray-200 rounded-full px-4 text-sm focus:outline-none focus:border-[#FFB703] transition text-gray-700" value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={handleCommentSubmit} />
-                  </div>
-              </div>
-              
-              {/* Comments List */}
-              <div className="space-y-6">
-                  <h3 className="text-gray-500 font-bold text-sm border-b border-gray-200 pb-2 flex items-center gap-2"><FaCommentAlt /> {song.comments?.length || 0} comments</h3>
-                  {song.comments && song.comments.length > 0 ? (
-                      [...song.comments].reverse().map((comment) => (
-                        <div key={comment._id} className="flex gap-4 group animate-fade-in-up">
-                            <div className="w-10 h-10 rounded-full bg-[#FAF7F2] flex-shrink-0 overflow-hidden border border-gray-100">
-                                <img src={`https://ui-avatars.com/api/?name=${comment.username}&background=random`} alt="u" className="w-full h-full object-cover" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-gray-700 text-sm font-bold">{comment.username}</span>
-                                    <span className="text-gray-400 text-xs">{new Date(comment.createdAt).toLocaleDateString()} {comment.timestamp > 0 && <span className="ml-2 text-[#FFB703]">at {formatTime(comment.timestamp)}</span>}</span>
-                                </div>
-                                {editingCommentId === comment._id ? (
-                                    <div className="mt-2">
-                                        <input className="border p-1 rounded w-full text-sm mb-2" value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus />
-                                        <div className="flex gap-2 text-xs">
-                                            <button onClick={() => handleEditSubmit(comment._id)} className="text-blue-500 font-bold">Save</button>
-                                            <button onClick={() => setEditingCommentId(null)} className="text-gray-500">Cancel</button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-gray-600 mt-1">{comment.text}</p>
-                                )}
-                                <div className="flex gap-3 mt-2 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => { setReplyingCommentId(comment._id); setReplyText(`@${comment.username} `); }} className="hover:text-[#FFB703] flex items-center gap-1"><FaReply /> Reply</button>
-                                    {user && user.username === comment.username && (
-                                        <>
-                                            <button onClick={() => { setEditingCommentId(comment._id); setEditText(comment.text); }} className="hover:text-blue-500 flex items-center gap-1"><FaEdit /> Edit</button>
-                                            <button onClick={() => handleDeleteComment(comment._id)} className="hover:text-red-500 flex items-center gap-1"><FaTrash /> Delete</button>
-                                        </>
-                                    )}
-                                </div>
-                                {replyingCommentId === comment._id && (
-                                    <div className="mt-3 flex gap-2">
-                                        <input className="border p-2 rounded w-full text-sm bg-gray-50" placeholder="Write a reply..." value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleReplySubmit(comment._id)} autoFocus />
-                                        <button onClick={() => setReplyingCommentId(null)} className="text-xs text-gray-500">Cancel</button>
-                                    </div>
-                                )}
-                                {comment.replies && comment.replies.length > 0 && (
-                                    <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-3">
-                                        {comment.replies.map((reply, idx) => (
-                                            <div key={idx} className="flex gap-3">
-                                                <div className="w-6 h-6 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden">
-                                                    <img src={`https://ui-avatars.com/api/?name=${reply.username}&background=random`} alt="r" className="w-full h-full object-cover" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className="text-gray-700 text-xs font-bold">{reply.username}</span>
-                                                        <span className="text-gray-400 text-[10px]">{new Date(reply.createdAt).toLocaleDateString()}</span>
-                                                    </div>
-                                                    <p className="text-xs text-gray-600">{reply.text}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                <div className="relative z-10 grid gap-6 lg:grid-cols-[1.7fr_0.9fr]">
+                    <div className="space-y-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-cyan-100">
+                                <span className="h-2 w-2 rounded-full bg-cyan-300" /> Song
+                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px]">{createdDate}</span>
                             </div>
                         </div>
-                      ))
-                  ) : (
-                      <p className="text-gray-400 text-sm italic text-center py-4">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
-                  )}
-              </div>
-          </div>
-          <div className="w-80 flex-shrink-0">
-              <div className="mb-6">
-                  <h3 className="text-gray-500 text-xs font-bold uppercase mb-4 border-b border-gray-200 pb-2">Fans who played this most</h3>
-                  <ul className="space-y-4">
-                      {[1, 2, 3].map((_, i) => (
-                          <li key={i} className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-full bg-[#FAF7F2] overflow-hidden border border-gray-100">
-                                      <img src={`https://ui-avatars.com/api/?name=Fan${i}&background=random`} alt="f" />
-                                  </div>
-                                  <span className="text-sm font-bold text-gray-600">Fan {i+1}</span>
-                              </div>
-                              <span className="text-xs text-[#FFB703] font-bold">{90 - i*10} plays</span>
-                          </li>
-                      ))}
-                  </ul>
-              </div>
-          </div>
-      </div>
+
+                        <div>
+                            <h1 className="text-5xl font-black leading-none sm:text-6xl">{song.title}</h1>
+                            <p className="mt-3 text-2xl font-semibold text-slate-200">{song.artist}</p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-sm font-semibold">
+                            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{song.plays || 0} lượt nghe</span>
+                            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{song.likes || 0} lượt tim</span>
+                            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5">{formatTime(displayedDuration)} phút</span>
+                            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1.5 text-cyan-100">#{song.artist || 'music'}</span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Nghệ sĩ</p>
+                                <p className="mt-2 text-2xl font-black">{song.artist || 'Unknown'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Uploader</p>
+                                <p className="mt-2 text-2xl font-black">{uploaderName}</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Followers uploader</p>
+                                <p className="mt-2 text-2xl font-black">{uploaderFollowers}</p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                            <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-300">
+                                <span className="uppercase tracking-[0.16em] text-slate-400">Live waveform</span>
+                                <span>{formatTime(isCurrentSong ? liveCurrentTime : 0)} / {formatTime(displayedDuration)}</span>
+                            </div>
+                            <div className="relative h-28 w-full cursor-pointer" onClick={handleWaveformClick}>
+                                <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-white/15" />
+                                <div className="absolute left-0 top-0 h-full w-[2px] rounded-full bg-white/80" style={{ left: `${(isCurrentSong && effectiveDuration) ? (liveCurrentTime / effectiveDuration) * 100 : 0}%` }} />
+                                <div className="absolute -left-1 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border-2 border-white bg-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.8)]" style={{ left: `${(isCurrentSong && effectiveDuration) ? (liveCurrentTime / effectiveDuration) * 100 : 0}%` }} />
+
+                                <div className="absolute bottom-1 left-0 right-0 flex items-end gap-[2px]">
+                                    {waveforms.slice(0, 95).map((height, i) => {
+                                        const barPercent = (i / 95) * 100;
+                                        const currentPercent = (isCurrentSong && effectiveDuration) ? (liveCurrentTime / effectiveDuration) * 100 : 0;
+                                        const isPlayed = barPercent < currentPercent;
+                                        return (
+                                            <div
+                                                key={i}
+                                                className="flex-1 rounded-t-sm transition-all duration-75"
+                                                style={{
+                                                    height: `${Math.max(18, height * 0.55)}%`,
+                                                    background: isPlayed ? 'linear-gradient(180deg, #f59e0b, #fb7185)' : 'rgba(226,232,240,0.55)'
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="w-full max-w-[460px] overflow-hidden rounded-3xl border border-white/15 bg-black/25 p-3 shadow-2xl">
+                            <div className="aspect-[4/3] overflow-hidden rounded-2xl">
+                                <img src={coverImage} alt="cover" className="h-full w-full object-cover object-center" />
+                            </div>
+                        </div>
+                        <div className="grid w-full max-w-[460px] grid-cols-2 gap-3">
+                            <div className="flex h-[74px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Upload</p>
+                                <p className="mt-1 truncate text-xl font-black">{uploaderName}</p>
+                            </div>
+                            <div className="flex h-[74px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/20 p-3 text-center">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Tâm trạng</p>
+                                <p className="mt-1 text-xl font-black">#Fresh</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className="glass-panel rounded-2xl border border-white/10 bg-[#0b1228]/80 p-4 sm:p-6">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
+                        <button onClick={handleLike} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition ${isLiked ? 'border-amber-300/50 bg-amber-300/15 text-amber-200' : 'border-white/20 bg-white/5 text-slate-200 hover:border-amber-300/40'}`}><FaHeart /> {isLiked ? 'Đã thích' : 'Thích'}</button>
+                        <button className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200"><FaRetweet /> Repost</button>
+                        <button className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200"><FaShareSquare /> Share</button>
+                        <button className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200"><FaEllipsisH /> More</button>
+                    </div>
+                    <div className="flex gap-4 text-sm font-semibold text-slate-300">
+                        <span className="inline-flex items-center gap-1"><FaPlay size={12} /> {song.plays || 0}</span>
+                        <span className="inline-flex items-center gap-1"><FaHeart size={12} /> {song.likes || 0}</span>
+                        <span className="inline-flex items-center gap-1"><FaRetweet size={12} /> 12</span>
+                    </div>
+                </div>
+
+                <div className="grid gap-5 lg:grid-cols-[1.5fr_0.95fr]">
+                    <div>
+                        <div className="mb-5 flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <div className="h-10 w-10 overflow-hidden rounded-full border border-white/20">
+                                <img src={user?.avatar || DEFAULT_USER_AVATAR} alt="me" className="h-full w-full object-cover" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Viết bình luận và nhấn Enter..."
+                                className="h-10 w-full rounded-full border border-white/10 bg-[#0b1228] px-4 text-sm text-white placeholder:text-slate-500 outline-none"
+                                value={commentText}
+                                onChange={(e) => setCommentText(e.target.value)}
+                                onKeyDown={handleCommentSubmit}
+                            />
+                        </div>
+
+                        <div className="space-y-5">
+                            <h3 className="flex items-center gap-2 border-b border-white/10 pb-2 text-sm font-bold uppercase tracking-[0.14em] text-slate-300"><FaCommentAlt /> {song.comments?.length || 0} bình luận</h3>
+                            {song.comments && song.comments.length > 0 ? (
+                                [...song.comments].reverse().map((comment) => (
+                                    <div id={`comment-${comment._id}`} key={comment._id} className={`group flex gap-4 rounded-xl border bg-white/5 p-3 transition ${highlightTargetId === `comment-${comment._id}` ? 'border-cyan-300/70 ring-2 ring-cyan-300/30' : 'border-white/10'}`}>
+                                        <Link to={comment.userId ? `/profile/${comment.userId}` : '#'} className="h-10 w-10 overflow-hidden rounded-full border border-white/20">
+                                            <img src={comment.userAvatar || DEFAULT_USER_AVATAR} alt={comment.username} className="h-full w-full object-cover" />
+                                        </Link>
+                                        <div className="flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {comment.userId ? (
+                                                    <Link to={`/profile/${comment.userId}`} className="text-sm font-bold text-white hover:text-cyan-300">{comment.username}</Link>
+                                                ) : (
+                                                    <span className="text-sm font-bold text-white">{comment.username}</span>
+                                                )}
+                                                <span className="text-xs text-slate-400">{new Date(comment.createdAt).toLocaleDateString('vi-VN')}</span>
+                                                {comment.timestamp > 0 && <span className="text-xs font-semibold text-cyan-300">{formatTime(comment.timestamp)}</span>}
+                                            </div>
+
+                                            {editingCommentId === comment._id ? (
+                                                <div className="mt-2">
+                                                    <input className="mb-2 w-full rounded border border-white/20 bg-[#0b1228] p-2 text-sm text-white" value={editText} onChange={(e) => setEditText(e.target.value)} autoFocus />
+                                                    <div className="flex gap-2 text-xs">
+                                                        <button onClick={() => handleEditSubmit(comment._id)} className="font-bold text-cyan-300">Lưu</button>
+                                                        <button onClick={() => setEditingCommentId(null)} className="text-slate-400">Hủy</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="mt-1 text-sm text-slate-300">{comment.text}</p>
+                                            )}
+
+                                            <div className="mt-2 flex gap-3 text-xs text-slate-400 opacity-0 transition-opacity group-hover:opacity-100">
+                                                <button onClick={() => { setReplyingCommentId(comment._id); setReplyText(`@${comment.username} `); }} className="inline-flex items-center gap-1 hover:text-cyan-300"><FaReply /> Trả lời</button>
+                                                {user && user.username === comment.username && (
+                                                    <>
+                                                        <button onClick={() => { setEditingCommentId(comment._id); setEditText(comment.text); }} className="inline-flex items-center gap-1 hover:text-cyan-300"><FaEdit /> Sửa</button>
+                                                        <button onClick={() => handleDeleteComment(comment._id)} className="inline-flex items-center gap-1 hover:text-rose-300"><FaTrash /> Xóa</button>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            {replyingCommentId === comment._id && (
+                                                <div className="mt-3 flex gap-2">
+                                                    <input className="w-full rounded border border-white/20 bg-[#0b1228] p-2 text-sm text-white" placeholder="Viết trả lời..." value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleReplySubmit(comment._id)} autoFocus />
+                                                    <button onClick={() => setReplyingCommentId(null)} className="text-xs text-slate-400">Hủy</button>
+                                                </div>
+                                            )}
+
+                                            {comment.replies && comment.replies.length > 0 && (
+                                                <div className="mt-3 space-y-2 border-l-2 border-white/10 pl-4">
+                                                    {comment.replies.map((reply, idx) => (
+                                                        <div id={reply._id ? `reply-${reply._id}` : undefined} key={reply._id || idx} className={`flex gap-3 rounded-md px-1 py-0.5 transition ${reply._id && highlightTargetId === `reply-${reply._id}` ? 'bg-cyan-500/15 ring-1 ring-cyan-300/40' : ''}`}>
+                                                            <Link to={reply.userId ? `/profile/${reply.userId}` : '#'} className="h-6 w-6 overflow-hidden rounded-full">
+                                                                <img src={reply.userAvatar || DEFAULT_USER_AVATAR} alt={reply.username} className="h-full w-full object-cover" />
+                                                            </Link>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {reply.userId ? (
+                                                                        <Link to={`/profile/${reply.userId}`} className="text-xs font-bold text-slate-200 hover:text-cyan-300">{reply.username}</Link>
+                                                                    ) : (
+                                                                        <span className="text-xs font-bold text-slate-200">{reply.username}</span>
+                                                                    )}
+                                                                    <span className="text-[10px] text-slate-500">{new Date(reply.createdAt).toLocaleDateString('vi-VN')}</span>
+                                                                </div>
+                                                                <p className="text-xs text-slate-400">{reply.text}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="py-4 text-center text-sm italic text-slate-500">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+                            )}
+                        </div>
+                    </div>
+                    <aside className="h-fit rounded-3xl border border-cyan-300/35 bg-gradient-to-br from-cyan-400/15 via-sky-400/10 to-white/5 p-5 shadow-[0_22px_45px_rgba(8,145,178,0.2)]">
+                        <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-cyan-100">Tác giả bài hát</p>
+                        {uploaderId ? (
+                            <Link to={`/profile/${uploaderId}`} className="mt-4 flex items-center gap-4 rounded-2xl border border-cyan-200/45 bg-black/20 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/70 hover:bg-cyan-200/10">
+                                <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-cyan-200/60 shadow-[0_0_22px_rgba(34,211,238,0.35)]">
+                                    <img src={uploaderAvatar} alt={uploaderName} className="h-full w-full object-cover" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="truncate text-xl font-black text-white">{uploaderName}</p>
+                                    <p className="mt-1 text-sm font-semibold text-cyan-100/90">Xem trang cá nhân tác giả</p>
+                                    <p className="mt-1 text-xs text-slate-300">{uploaderFollowers} người theo dõi</p>
+                                </div>
+                            </Link>
+                        ) : (
+                            <div className="mt-4 flex items-center gap-4 rounded-2xl border border-cyan-200/30 bg-black/20 p-4">
+                                <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-cyan-200/40">
+                                    <img src={uploaderAvatar} alt={uploaderName} className="h-full w-full object-cover" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="truncate text-xl font-black text-white">{uploaderName}</p>
+                                    <p className="mt-1 text-sm text-slate-300">Không có trang profile</p>
+                                </div>
+                            </div>
+                        )}
+                    </aside>
+                </div>
+            </section>
     </div>
   );
 };

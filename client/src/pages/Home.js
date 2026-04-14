@@ -1,367 +1,239 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { useLocation } from 'react-router-dom';
-import { FaPlay, FaHeart, FaUserPlus, FaEllipsisH, FaRetweet, FaTrash, FaStar, FaHeadphonesAlt } from 'react-icons/fa';
-import { useAuth } from '../context/AuthContext';
+import { FaPlay, FaCheckCircle, FaTimes } from 'react-icons/fa';
+import { Link, useLocation } from 'react-router-dom';
+import { api } from '../utils/api';
+
+const SongCard = memo(({ song, size = 'md' }) => {
+  const { playSong, songList } = usePlayer();
+  const cardSize = size === 'md' ? 'w-48' : 'w-40';
+  const imgSize = size === 'md' ? 'h-48' : 'h-40';
+
+  return (
+    <div className={`flex-shrink-0 ${cardSize}`}>
+      <div
+        className="block group relative cursor-pointer"
+        onClick={() => playSong(song, songList)}
+      >
+        <img src={song.coverImage} alt={song.title} loading="lazy" decoding="async" className={`w-full ${imgSize} object-cover rounded-lg shadow-lg`} />
+        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center rounded-lg transition-all duration-300">
+          <FaPlay className="text-white text-4xl opacity-0 group-hover:opacity-100 transform group-hover:scale-110 transition-all duration-300" />
+        </div>
+      </div>
+      <div className="mt-3">
+        <Link to={`/song/${song._id}`} className="text-base font-semibold text-white truncate hover:underline">{song.title}</Link>
+        <p className="text-sm text-gray-400 truncate">{song.artist}</p>
+      </div>
+    </div>
+  );
+});
+
+const WelcomeBanner = () => (
+  <section className="relative mb-10 overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-[#1b2a7a] via-[#7c3aed] to-[#ec4899] p-8 text-white shadow-[0_22px_60px_rgba(20,12,55,0.5)] sm:p-10">
+    <div className="hero-animated-image" />
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#070b1f]/75 via-[#2a1459]/45 to-[#0e1227]/70" />
+    <div className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-cyan-300/25 blur-3xl" />
+    <div className="pointer-events-none absolute -bottom-20 left-1/4 h-56 w-56 rounded-full bg-fuchsia-200/20 blur-3xl" />
+    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_20%,rgba(255,255,255,0.16)_50%,transparent_80%)] opacity-40" />
+
+    <div className="relative z-10 max-w-2xl animate-fade-in-up">
+      <p className="mb-4 inline-flex rounded-full border border-white/35 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-cyan-100">
+        Moontune Selection
+      </p>
+      <h1 className="text-3xl font-black leading-[1.1] tracking-tight text-white drop-shadow-[0_10px_28px_rgba(4,8,30,0.45)] sm:text-6xl sm:leading-[1.06]">
+        <span className="block whitespace-nowrap">Bật cảm hứng nghe nhạc</span>
+        <span className="mt-2 block">mỗi ngày</span>
+      </h1>
+      <p className="mt-6 max-w-xl text-base leading-8 text-slate-100/95 sm:text-xl sm:leading-9">
+        Khám phá playlist theo tâm trạng, bản phát hành mới và những ca khúc đang gây bão trong cộng đồng.
+      </p>
+
+      <div className="mt-7 flex flex-wrap gap-2.5 text-xs font-bold sm:text-sm">
+        <span className="rounded-full border border-white/35 bg-white/12 px-3.5 py-1.5">#Chill đêm khuya</span>
+        <span className="rounded-full border border-white/35 bg-white/12 px-3.5 py-1.5">#Indie Việt</span>
+        <span className="rounded-full border border-white/35 bg-white/12 px-3.5 py-1.5">#Top Trending</span>
+      </div>
+
+      <div className="mt-8 flex flex-wrap gap-3">
+        <Link
+          to="/upload"
+          className="rounded-full bg-white px-6 py-2.5 text-sm font-black text-[#2f2675] transition hover:-translate-y-0.5 hover:bg-cyan-100"
+        >
+          Tải bài hát của bạn
+        </Link>
+        <a
+          href="#new-releases"
+          className="rounded-full border border-white/50 bg-black/15 px-6 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-black/25"
+        >
+          Nghe ngay
+        </a>
+      </div>
+    </div>
+  </section>
+);
+
+const SongRow = memo(({ title, songs }) => {
+  if (!songs || songs.length === 0) return null;
+  return (
+    <section className="mb-12">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-white">{title}</h2>
+        <Link to="/songs" className="text-sm font-semibold text-gray-400 hover:text-white">XEM THÊM</Link>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        {songs.map((song) => <SongCard key={song._id} song={song} size="md" />)}
+      </div>
+    </section>
+  );
+});
 
 const Home = () => {
+  const location = useLocation();
+  const searchKeyword = useMemo(() => (new URLSearchParams(location.search).get('q') || '').trim(), [location.search]);
+  const [welcomeMessage, setWelcomeMessage] = useState('');
   const [songs, setSongs] = useState([]);
-  const [sidebarData, setSidebarData] = useState({ likedSongs: [], history: [], albums: [] });
-  const [menuOpenId, setMenuOpenId] = useState(null);
-  const { playSong } = usePlayer();
-  const { search } = useLocation();
-  const { user, updateUser } = useAuth();
+  const [sliders, setSliders] = useState([]);
+  const [featuredSongs, setFeaturedSongs] = useState([]);
+  const [bannerAds, setBannerAds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { setSongList } = usePlayer();
 
-  // Danh mục giả lập để trang trí
-  const categories = ["All", "Lofi Beats", "Piano Chill", "Jazz Vibes", "Study", "Sleep", "Synthwave", "Indie Pop"];
-  const [activeCategory, setActiveCategory] = useState("All");
+  useEffect(() => {
+    const message = sessionStorage.getItem('moontune:welcome-message');
+    if (!message) return;
 
-  const topArtists = [
-    { name: "Son Tung M-TP", followers: "14.2M", image: "https://bhmedia.vn/wp-content/uploads/2025/11/son-tung-mtp-3.jpg" },
-    { name: "Den Vau", followers: "5.8M", image: "https://vcdn1-vnexpress.vnecdn.net/2022/02/09/denvau-5827-1627546466-5337-1644377203.jpg?w=680&h=0&q=100&dpr=2&fit=crop&s=rpm2cgIdVzle7xKvlbBCaA" },
-    { name: "HIEUTHUHAI", followers: "3.1M", image: "https://i.scdn.co/image/ab67616d00001e02c006b0181a3846c1c63e178f" },
-    { name: "Negav", followers: "2.5M", image: "https://hosongoisao.com/wp-content/uploads/2025/07/logo-negav.jpg" },
-  ];
+    setWelcomeMessage(message);
+    sessionStorage.removeItem('moontune:welcome-message');
+
+    const timeoutId = setTimeout(() => setWelcomeMessage(''), 4000);
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
     const fetchSongs = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/songs${search}`);
-        setSongs(res.data);
-      } catch (err) {
-        console.error("Error fetching songs:", err);
-      }
-    };
-    fetchSongs();
-  }, [search]);
-
-  // Fetch Sidebar Data
-  useEffect(() => {
-    const fetchUserData = async () => {
-        if (user) {
-            try {
-                const res = await axios.get(`http://localhost:5000/api/users/${user._id}`);
-                const resAlbums = await axios.get(`http://localhost:5000/api/albums/user/${user._id}`);
-                
-                setSidebarData({
-                    likedSongs: res.data.likedSongs || [],
-                    history: res.data.history || [],
-                    albums: resAlbums.data || []
-                });
-            } catch (err) {
-                console.error(err);
-            }
+        setLoading(true);
+        setError('');
+        const songsUrl = searchKeyword ? `/api/songs?q=${encodeURIComponent(searchKeyword)}` : '/api/songs';
+        if (searchKeyword) {
+          const songsRes = await api.get(songsUrl);
+          const nextSongs = songsRes.data || [];
+          setSongs(nextSongs);
+          setSongList(nextSongs);
+          setSliders([]);
+          setFeaturedSongs([]);
+          setBannerAds([]);
+        } else {
+          const [songsRes, configRes, bannerRes] = await Promise.all([
+            api.get(songsUrl),
+            api.get('/api/public/home-config'),
+            api.get('/api/public/ads/banner'),
+          ]);
+          const nextSongs = songsRes.data || [];
+          setSongs(nextSongs);
+          setSongList(nextSongs);
+          setSliders(configRes.data?.sliders || []);
+          setFeaturedSongs(configRes.data?.featuredSongs || []);
+          setBannerAds(bannerRes.data || []);
         }
+      } catch (err) {
+        console.error('Error fetching songs:', err);
+        setError('Không thể tải danh sách bài hát. Vui lòng thử lại.');
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchUserData();
-  }, [user]);
 
-  const handlePlay = async (song) => {
-      playSong(song, songs); 
-      try {
-          await axios.put(`http://localhost:5000/api/songs/${song._id}/play`);
-          if (user) {
-             await axios.put(`http://localhost:5000/api/users/history/${song._id}`, {}, {
-                headers: { token: `Bearer ${user.token}` }
-             });
-             setSidebarData(prev => ({
-                 ...prev,
-                 history: [song, ...prev.history.filter(s => s._id !== song._id)].slice(0, 20)
-             }));
-          }
-      } catch (err) {
-          console.error(err);
-      }
-  };
+    fetchSongs();
+  }, [setSongList, searchKeyword]);
 
-  // Hàm xử lý Play Mix (Phát ngẫu nhiên)
-  const handlePlayMix = () => {
-      if (songs.length > 0) {
-          const randomIndex = Math.floor(Math.random() * songs.length);
-          handlePlay(songs[randomIndex]);
-      }
-  };
+  if (loading) {
+    return <div className="py-20 text-center text-slate-300">Đang tải bài hát...</div>;
+  }
 
-  const handleLike = async (id) => {
-      if (!user) return alert("Please login to like songs!");
-      try {
-          const res = await axios.put(`http://localhost:5000/api/users/like/${id}`, {}, {
-             headers: { token: `Bearer ${user.token}` }
-          });
-          
-          if (res.data === "Liked") {
-              setSongs(songs.map(song => song._id === id ? { ...song, likes: song.likes + 1 } : song));
-              updateUser({ likedSongs: [...(user.likedSongs || []), id] });
-              const likedSong = songs.find(s => s._id === id);
-              if(likedSong) {
-                  setSidebarData(prev => ({ ...prev, likedSongs: [likedSong, ...prev.likedSongs] }));
-              }
-          } else {
-              setSongs(songs.map(song => song._id === id ? { ...song, likes: song.likes - 1 } : song));
-              updateUser({ likedSongs: (user.likedSongs || []).filter(songId => songId !== id) });
-              setSidebarData(prev => ({ ...prev, likedSongs: prev.likedSongs.filter(s => s._id !== id) }));
-          }
-      } catch (err) {
-          console.error(err);
-      }
-  };
+  if (error) {
+    return <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-center text-red-300">{error}</div>;
+  }
 
-  const handleDelete = async (id) => {
-      if(!window.confirm("Bạn có chắc chắn muốn xóa bài hát này không? Hành động này không thể hoàn tác.")) return;
-      try {
-          await axios.delete(`http://localhost:5000/api/songs/${id}`, {
-              headers: { token: `Bearer ${user.token}` }
-          });
-          setSongs(songs.filter(song => song._id !== id));
-          setMenuOpenId(null);
-          alert("Đã xóa bài hát thành công!");
-      } catch (err) {
-          console.error(err);
-          alert("Xóa thất bại! Có lỗi xảy ra.");
-      }
-  };
-
-  const formatNumber = (num) => {
-    if (!num) return 0;
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-    return num;
-  };
-
-  // Hàm format thời gian (giây -> mm:ss)
-  const formatDuration = (seconds) => {
-    if (!seconds) return "0:00";
-    const min = Math.floor(seconds / 60);
-    const sec = Math.floor(seconds % 60);
-    return `${min}:${sec < 10 ? '0' + sec : sec}`;
-  };
-
-  const SidebarTrack = ({ song }) => (
-      <div className="flex gap-3 mb-4 group cursor-pointer hover:bg-white p-2 rounded-lg transition" onClick={() => handlePlay(song)}>
-          <div className="relative w-12 h-12 flex-shrink-0">
-              <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover rounded-lg shadow-sm" />
-              <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center text-white rounded-lg">
-                  <FaPlay size={10} />
-              </div>
-          </div>
-          <div className="overflow-hidden min-w-0 flex-1">
-              <p className="text-xs text-gray-500 truncate hover:underline">{song.artist}</p>
-              <p className="text-sm font-bold text-gray-700 truncate hover:text-[#FFB703]">{song.title}</p>
-              
-              <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1">
-                  <span className="flex items-center gap-1"><FaPlay size={8} /> {formatNumber(song.plays)}</span>
-                  <span className="flex items-center gap-1"><FaHeart size={8} /> {formatNumber(song.likes)}</span>
-              </div>
-          </div>
+  if (songs.length === 0) {
+    return (
+      <div className="py-20 text-center text-slate-400">
+        {searchKeyword
+          ? `Không tìm thấy bài hát nào với từ khóa "${searchKeyword}".`
+          : 'Chưa có bài hát nào trên hệ thống.'}
       </div>
-  );
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto pb-32 px-4">
-      
-      {/* 1. HERO BANNER (Mới) */}
-      <div className="mt-6 mb-8 rounded-3xl overflow-hidden relative h-64 md:h-80 shadow-xl group">
-          <div className="absolute inset-0 bg-gradient-to-r from-[#A5D8FF] via-[#FFB703] to-[#FF9E00] opacity-90"></div>
-          <img 
-            src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1470&q=80" 
-            alt="Hero" 
-            className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-40 group-hover:scale-105 transition duration-700"
-          />
-          <div className="absolute inset-0 flex flex-col justify-center px-8 md:px-16 text-white">
-              <span className="bg-white/20 backdrop-blur-md w-fit px-3 py-1 rounded-full text-xs font-bold mb-4 border border-white/30">TRENDING NOW</span>
-              <h1 className="text-4xl md:text-6xl font-bold mb-4 drop-shadow-md">Pastel Vibes <br/> & Chill Beats</h1>
-              <p className="text-white/90 max-w-lg mb-6 text-sm md:text-base font-medium">Discover the smoothest tracks selected just for you. Relax, study, or just vibe with our curated collection.</p>
-              <div className="flex gap-4">
-                  <button 
-                    onClick={handlePlayMix}
-                    className="bg-white text-[#FFB703] px-8 py-3 rounded-full font-bold shadow-lg hover:bg-gray-100 transition transform hover:-translate-y-1 flex items-center gap-2"
-                  >
-                      <FaPlay /> Play Mix
-                  </button>
-                  <button className="bg-transparent border-2 border-white text-white px-8 py-3 rounded-full font-bold hover:bg-white/10 transition flex items-center gap-2">
-                      <FaStar /> Favorites
-                  </button>
+    <div className="text-white">
+      {welcomeMessage && (
+        <div className="pointer-events-none fixed right-4 top-24 z-50 w-[min(92vw,420px)] animate-fade-in-up">
+          <div className="pointer-events-auto rounded-2xl border border-emerald-300/35 bg-[#0f1e1b]/95 p-4 text-emerald-100 shadow-[0_22px_55px_rgba(16,185,129,0.25)] backdrop-blur-xl">
+            <div className="flex items-start gap-3">
+              <FaCheckCircle className="mt-0.5 text-lg text-emerald-300" />
+              <div className="flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Welcome</p>
+                <p className="mt-1 text-sm font-semibold leading-6">{welcomeMessage}</p>
               </div>
+              <button
+                onClick={() => setWelcomeMessage('')}
+                className="rounded-full border border-emerald-200/25 bg-emerald-300/10 p-1.5 text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                <FaTimes className="text-xs" />
+              </button>
+            </div>
           </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Cột Chính (Danh sách nhạc) */}
-        <div className="flex-1">
-            
-            {/* 2. CATEGORY TABS (Mới) */}
-            <div className="flex gap-3 overflow-x-auto pb-4 mb-4 scrollbar-hide">
-                {categories.map((cat, idx) => (
-                    <button 
-                        key={idx}
-                        onClick={() => setActiveCategory(cat)}
-                        className={`px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition shadow-sm border ${
-                            activeCategory === cat 
-                            ? 'bg-[#FFB703] text-white border-[#FFB703]' 
-                            : 'bg-white text-gray-500 border-gray-100 hover:border-[#FFB703] hover:text-[#FFB703]'
-                        }`}
-                    >
-                        {cat}
-                    </button>
-                ))}
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-center gap-2 mb-6 border-b border-[#A5D8FF]/30 pb-4">
-                <h2 className="text-xl md:text-2xl font-bold text-gray-700 truncate flex items-center gap-2">
-                    {search ? `Search: "${decodeURIComponent(search.split('=')[1])}"` : "Fresh Tracks"}
-                    {!search && <FaHeadphonesAlt className="text-[#A5D8FF]" />}
-                </h2>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                {songs.map((song) => {
-                    const isLiked = user?.likedSongs?.includes(song._id);
-                    const isOwner = user && (song.uploader === user._id);
-
-                    return (
-                    <div key={song._id} className="bg-white rounded-2xl p-3 group hover:shadow-xl hover:shadow-[#FFB703]/10 transition-all duration-300 border border-gray-50 hover:border-[#FFB703]/30 relative">
-                        {/* Ảnh bìa */}
-                        <div className="relative aspect-square w-full overflow-hidden rounded-xl cursor-pointer mb-3" onClick={() => handlePlay(song)}>
-                            <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
-                            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                <button className="w-12 h-12 bg-[#FFB703] rounded-full flex items-center justify-center text-white shadow-lg transform scale-0 group-hover:scale-100 transition duration-300 hover:bg-orange-400">
-                                    <FaPlay className="ml-1 text-lg" />
-                                </button>
-                            </div>
-                            {/* Hiển thị thời lượng đúng */}
-                            <span className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur-sm">
-                                {formatDuration(song.duration)}
-                            </span>
-                        </div>
-
-                        {/* Thông tin bài hát */}
-                        <div className="flex flex-col">
-                            <h3 className="font-bold text-gray-700 truncate text-base hover:text-[#FFB703] cursor-pointer transition mb-1" onClick={() => handlePlay(song)}>{song.title}</h3>
-                            <p className="text-xs text-gray-400 truncate mb-3 flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-[#A5D8FF]"></span>
-                                {song.artist}
-                            </p>
-                            
-                            {/* Stats */}
-                            <div className="flex justify-between items-center text-xs text-gray-400 font-medium border-t border-gray-100 pt-3">
-                                <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-full">▶ {formatNumber(song.plays)}</span>
-                                <div className="flex gap-2 relative">
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); handleLike(song._id); }} 
-                                        className={`flex items-center gap-1 transition p-1.5 rounded-full hover:bg-red-50 ${isLiked ? 'text-red-500' : 'hover:text-red-500'}`}
-                                        title="Like"
-                                    >
-                                        <FaHeart /> {formatNumber(song.likes)}
-                                    </button>
-                                    
-                                    {isOwner && (
-                                        <>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === song._id ? null : song._id); }}
-                                                className="hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition"
-                                            >
-                                                <FaEllipsisH />
-                                            </button>
-
-                                            {menuOpenId === song._id && (
-                                                <div className="absolute right-0 bottom-full mb-2 w-32 bg-white shadow-xl rounded-lg border border-gray-100 z-20 overflow-hidden animate-fade-in-up">
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(song._id); }}
-                                                        className="flex items-center gap-2 w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-red-50 font-bold transition"
-                                                    >
-                                                        <FaTrash /> Delete
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )})}
-            </div>
         </div>
+      )}
 
-        {/* Cột Phụ (Sidebar) */}
-        <div className="w-full lg:w-80 hidden lg:block sticky top-24 h-fit space-y-8">
-                {/* Top Artists */}
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#A5D8FF]/20">
-                    <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
-                        <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wider">Artists to Follow</h3>
-                        <span className="text-xs text-[#A5D8FF] cursor-pointer hover:text-[#FFB703] font-bold">Refresh</span>
-                    </div>
-                    <ul className="space-y-4">
-                        {topArtists.map((artist, idx) => (
-                            <li key={idx} className="flex items-center justify-between group">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-[#FAF7F2] overflow-hidden border-2 border-white shadow-sm group-hover:border-[#FFB703] transition">
-                                        <img src={artist.image} alt="avatar" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 group-hover:text-[#FFB703] cursor-pointer truncate w-32">{artist.name}</p>
-                                        <p className="text-xs text-gray-400">{artist.followers} followers</p>
-                                    </div>
-                                </div>
-                                <button className="text-xs border border-[#A5D8FF] text-[#A5D8FF] px-3 py-1 rounded-full hover:bg-[#A5D8FF] hover:text-white transition flex items-center gap-1">
-                                    <FaUserPlus />
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
+      {searchKeyword && (
+        <section className="mb-6 rounded-2xl border border-cyan-300/30 bg-cyan-300/10 p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Kết quả tìm kiếm</p>
+          <h2 className="mt-1 text-xl font-black text-white">"{searchKeyword}"</h2>
+          <p className="mt-1 text-sm text-slate-300">Tìm thấy {songs.length} bài hát phù hợp.</p>
+        </section>
+      )}
 
-                {/* LIKED SONGS SECTION */}
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#A5D8FF]/20">
-                    <div className="flex justify-between items-center mb-4 text-gray-500 border-b border-gray-100 pb-2">
-                        <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wider flex items-center gap-2">
-                            <FaHeart className="text-red-400"/> Liked Songs
-                        </h3>
-                        <span className="text-xs cursor-pointer hover:text-[#FFB703] font-bold">View all</span>
-                    </div>
-                    
-                    {sidebarData.likedSongs.length > 0 ? (
-                        <div className="flex flex-col">
-                            {sidebarData.likedSongs.slice(0, 3).map(song => (
-                                <SidebarTrack key={song._id} song={song} />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-xs text-gray-400 italic text-center py-2">No likes yet.</p>
-                    )}
-                </div>
-
-                {/* HISTORY SECTION */}
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#A5D8FF]/20">
-                    <div className="flex justify-between items-center mb-4 text-gray-500 border-b border-gray-100 pb-2">
-                        <h3 className="text-xs font-bold uppercase text-gray-700 tracking-wider flex items-center gap-2">
-                            <FaRetweet className="text-blue-400"/> History
-                        </h3>
-                        <span className="text-xs cursor-pointer hover:text-[#FFB703] font-bold">View all</span>
-                    </div>
-
-                    {sidebarData.history.length > 0 ? (
-                        <div className="flex flex-col">
-                            {sidebarData.history.slice(0, 3).map(song => (
-                                <SidebarTrack key={song._id} song={song} />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-xs text-gray-400 italic text-center py-2">No history yet.</p>
-                    )}
-                </div>
-
-                {/* Footer Links */}
-                <div className="text-[11px] text-gray-400 flex flex-wrap gap-x-3 gap-y-2 justify-center">
-                    <span className="hover:text-[#FFB703] cursor-pointer transition">Legal</span>
-                    <span className="hover:text-[#FFB703] cursor-pointer transition">Privacy</span>
-                    <span className="hover:text-[#FFB703] cursor-pointer transition">Cookies</span>
-                    <span className="hover:text-[#FFB703] cursor-pointer transition">About</span>
-                    <span className="hover:text-[#FFB703] cursor-pointer transition">Contact</span>
-                </div>
+      {sliders.length > 0 ? (
+        <div className="mb-8 overflow-hidden rounded-2xl border border-white/10">
+          {sliders.slice(0, 1).map((slider, idx) => (
+            <a key={`${slider.imageUrl}-${idx}`} href={slider.linkUrl || '#'} className="relative block">
+              <img src={slider.imageUrl} alt={slider.title || 'slider'} decoding="async" className="h-56 w-full object-cover sm:h-72" />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent p-6">
+                <h2 className="text-3xl font-black text-white">{slider.title || 'MOONTUNE'}</h2>
+                <p className="mt-2 text-sm text-slate-200">{slider.subtitle || 'Âm nhạc được chọn lọc mỗi ngày'}</p>
+              </div>
+            </a>
+          ))}
         </div>
-      </div>
+      ) : <WelcomeBanner />}
+
+      {searchKeyword ? (
+        <SongRow title="Bài hát phù hợp" songs={songs} />
+      ) : (
+        <>
+          {featuredSongs.length > 0 && <SongRow title="Featured by Admin" songs={featuredSongs.slice(0, 6)} />}
+          <div id="new-releases">
+            <SongRow title="New Releases" songs={songs.slice(0, 6)} />
+          </div>
+          <SongRow title="Popular Right Now" songs={songs.slice(6, 12)} />
+        </>
+      )}
+
+      {bannerAds.length > 0 && (
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <p className="mb-3 text-xs uppercase tracking-[0.16em] text-slate-400">Sponsored</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {bannerAds.slice(0, 2).map((ad) => (
+              <a key={ad._id} href={ad.linkUrl || '#'} className="overflow-hidden rounded-xl border border-white/10">
+                <img src={ad.imageUrl} alt={ad.title} loading="lazy" decoding="async" className="h-28 w-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

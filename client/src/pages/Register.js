@@ -1,125 +1,163 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
-import { FaUser, FaEnvelope, FaLock, FaMusic } from 'react-icons/fa';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
+import { FaUser, FaEnvelope, FaLock, FaMusic, FaArrowRight, FaEye, FaEyeSlash, FaTimes } from 'react-icons/fa';
 
 const Register = () => {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const navigate = useNavigate();
-  const [error, setError] = useState(false);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(false);
+    setError('');
+
     try {
-      await axios.post("http://localhost:5000/api/auth/register", {
-        username,
-        email,
-        password,
-      });
-      navigate("/login");
+      await api.post('/api/auth/register', { username, email, password });
+      const loginRes = await api.post('/api/auth/login', { email, password });
+      login(loginRes.data);
+      sessionStorage.setItem(
+        'moontune:welcome-message',
+        `Welcome ${loginRes.data?.username || username}, chào mừng đã đến MoonTune!`
+      );
+      navigate('/');
     } catch (err) {
-      setError(true);
+      setError(err.response?.data?.message || err.response?.data || 'Không thể đăng ký. Vui lòng thử lại.');
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-white">
-      {/* Left Side - Image Banner */}
-      <div className="hidden lg:flex w-1/2 bg-cover bg-center relative bg-gray-900" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80')" }}>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-col justify-end p-12 text-white">
-            <h2 className="text-5xl font-bold mb-4">Join the Community.</h2>
-            <p className="text-lg text-gray-200 max-w-md">Create an account to save tracks, follow artists, and build your own playlists.</p>
-        </div>
-      </div>
+    <div className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <Link to="/" className="absolute left-6 top-6 z-50 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition hover:bg-white/20">
+        <FaTimes className="text-sm" />
+      </Link>
 
-      {/* Right Side - Register Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#FAF7F2]">
-        <div className="max-w-md w-full">
-            <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#A5D8FF]/20 text-[#A5D8FF] mb-4">
-                    <FaMusic size={20} />
-                </div>
-                <h2 className="text-3xl font-bold text-gray-800">Create Account</h2>
-                <p className="text-gray-500 mt-2">Start your musical journey today.</p>
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-[0_30px_90px_rgba(4,8,20,0.55)] backdrop-blur-xl lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="relative hidden overflow-hidden border-r border-white/10 lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(122,92,255,0.3),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(33,212,253,0.26),transparent_38%),linear-gradient(145deg,rgba(9,14,31,0.96),rgba(16,20,45,0.92))]" />
+          <div className="absolute -left-24 top-10 h-64 w-64 rounded-full bg-violet-400/20 blur-3xl animate-float-slow" />
+          <div className="absolute -right-24 bottom-8 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl animate-float-slow" />
+
+          <div className="relative z-10 flex h-full flex-col justify-between p-10 text-white">
+            <div className="inline-flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-cyan-100">
+              <FaMusic />
+              MOONTUNE
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-5">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                            <FaUser />
-                        </div>
-                        <input 
-                            type="text" 
-                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-[#A5D8FF] focus:ring-2 focus:ring-[#A5D8FF]/20 outline-none transition bg-white"
-                            placeholder="Choose a username"
-                            value={username} 
-                            onChange={(e) => setUsername(e.target.value)}
-                            required
-                        />
-                    </div>
+            <div className="max-w-md space-y-6">
+              <h1 className="text-5xl font-black leading-tight tracking-tight text-white">
+                Tạo tài khoản để bắt đầu hành trình âm nhạc.
+              </h1>
+              <p className="text-lg leading-8 text-slate-300">
+                Lưu bài hát yêu thích, theo dõi lịch sử phát và cá nhân hóa trải nghiệm nghe nhạc.
+              </p>
+              <div className="grid gap-3 text-sm text-slate-200">
+                <div className="glass-panel rounded-2xl px-4 py-3">Lưu playlist riêng của bạn</div>
+                <div className="glass-panel rounded-2xl px-4 py-3">Khám phá bài hát theo sở thích</div>
+                <div className="glass-panel rounded-2xl px-4 py-3">Kết nối với cộng đồng MOONTUNE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative flex items-center justify-center p-6 sm:p-8 lg:p-10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(122,92,255,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(33,212,253,0.16),transparent_35%)]" />
+          <div className="relative z-10 w-full max-w-md animate-fade-in-up">
+            <div className="mb-8 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-violet-200 shadow-[0_0_30px_rgba(122,92,255,0.28)]">
+                <FaMusic className="text-2xl" />
+              </div>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">Tạo tài khoản mới</h1>
+              <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                Đăng ký miễn phí để bắt đầu nghe và tải lên những bài hát bạn yêu thích.
+              </p>
+            </div>
+
+            <form onSubmit={handleRegister} className="glass-panel space-y-5 rounded-[1.75rem] p-6 sm:p-7">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-200">Tên người dùng</label>
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0d1730]/90 px-4 py-3 transition focus-within:border-violet-300/50 focus-within:ring-2 focus-within:ring-violet-300/20">
+                  <FaUser className="text-violet-300/80" />
+                  <input
+                    type="text"
+                    className="w-full bg-transparent text-white placeholder:text-slate-500 focus:outline-none"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="username"
+                    required
+                  />
                 </div>
+              </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                            <FaEnvelope />
-                        </div>
-                        <input 
-                            type="email" 
-                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-[#A5D8FF] focus:ring-2 focus:ring-[#A5D8FF]/20 outline-none transition bg-white"
-                            placeholder="Enter your email"
-                            value={email} 
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-200">Email</label>
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0d1730]/90 px-4 py-3 transition focus-within:border-cyan-300/50 focus-within:ring-2 focus-within:ring-cyan-300/20">
+                  <FaEnvelope className="text-cyan-300/80" />
+                  <input
+                    type="email"
+                    className="w-full bg-transparent text-white placeholder:text-slate-500 focus:outline-none"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                  />
                 </div>
+              </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                            <FaLock />
-                        </div>
-                        <input 
-                            type="password" 
-                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:border-[#A5D8FF] focus:ring-2 focus:ring-[#A5D8FF]/20 outline-none transition bg-white"
-                            placeholder="Create a password"
-                            value={password} 
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
-                    </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-200">Mật khẩu</label>
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0d1730]/90 px-4 py-3 transition focus-within:border-cyan-300/50 focus-within:ring-2 focus-within:ring-cyan-300/20">
+                  <FaLock className="text-cyan-300/80" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="w-full bg-transparent text-white placeholder:text-slate-500 focus:outline-none"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-cyan-300/80 transition hover:text-cyan-300"
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
                 </div>
+              </div>
 
-                <div className="flex items-start text-sm text-gray-600">
-                    <input type="checkbox" className="mt-1 mr-2 accent-[#A5D8FF]" required />
-                    <span>I agree to the <button type="button" className="text-[#A5D8FF] font-bold hover:underline">Terms of Service</button> and <button type="button" className="text-[#A5D8FF] font-bold hover:underline">Privacy Policy</button>.</span>
+              {error && (
+                <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {error}
                 </div>
+              )}
 
-                {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded">Something went wrong!</p>}
-
-                <button 
-                    type="submit" 
-                    disabled={loading}
-                    className="w-full bg-gray-800 text-white font-bold py-3 rounded-lg shadow-lg hover:bg-black transition transform hover:-translate-y-0.5 disabled:opacity-70"
-                >
-                    {loading ? "Creating Account..." : "Sign Up"}
-                </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-400 via-cyan-400 to-cyan-500 px-5 py-3.5 text-base font-bold text-slate-950 shadow-[0_18px_40px_rgba(33,212,253,0.28)] transition hover:scale-[1.01] hover:shadow-[0_24px_55px_rgba(122,92,255,0.3)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Đang tạo tài khoản...' : 'Đăng ký'}
+                {!loading && <FaArrowRight className="transition group-hover:translate-x-0.5" />}
+              </button>
             </form>
 
-            <p className="text-center mt-8 text-gray-600">
-                Already have an account? <Link to="/login" className="text-[#A5D8FF] font-bold hover:underline">Log in</Link>
+            <p className="mt-6 text-center text-sm text-slate-300">
+              Đã có tài khoản?{' '}
+              <Link to="/login" className="font-semibold text-cyan-200 underline decoration-cyan-200/40 underline-offset-4 hover:text-white">
+                Đăng nhập ngay
+              </Link>
             </p>
+          </div>
         </div>
       </div>
     </div>

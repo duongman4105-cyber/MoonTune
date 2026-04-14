@@ -2,18 +2,188 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #FAF7F2; /* Màu nền Be Pastel */
-  color: #4b5563; /* Chữ màu xám nhẹ */
+:root {
+  --bg-deep: #0b1020;
+  --bg-panel: #121a31;
+  --bg-panel-soft: #1a2340;
+  --line-soft: rgba(134, 167, 255, 0.24);
+  --text-main: #e6edff;
+  --text-sub: #9aa7cc;
+  --cyan: #21d4fd;
+  --violet: #7a5cff;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+    radial-gradient(circle at 15% 4%, rgba(60, 156, 255, 0.34), transparent 25%),
+    radial-gradient(circle at 85% 12%, rgba(127, 93, 255, 0.3), transparent 30%),
+    radial-gradient(circle at 30% 90%, rgba(0, 255, 213, 0.18), transparent 25%),
+    linear-gradient(145deg, #0a0f1f 0%, #111735 45%, #171e3f 100%);
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: auto;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  top: -8rem;
+  right: -6rem;
+  width: 24rem;
+  height: 24rem;
+  background: radial-gradient(circle, rgba(0, 217, 255, 0.22), transparent 70%);
+  filter: blur(18px);
+}
+
+body::after {
+  bottom: -10rem;
+  left: -8rem;
+  width: 28rem;
+  height: 28rem;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.16), transparent 72%);
+  filter: blur(20px);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(0, 217, 255, 0.28);
+  color: #ffffff;
+}
+
+@keyframes floatSlow {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 217, 255, 0.24);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(0, 217, 255, 0);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.8s ease-in-out infinite;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.35s ease-out both;
+}
+
+@keyframes heroPanZoom {
+  0% {
+    transform: scale(1.04) translate3d(0, 0, 0);
+    filter: saturate(1) brightness(0.78);
+  }
+  50% {
+    transform: scale(1.11) translate3d(-1.8%, -1.2%, 0);
+    filter: saturate(1.12) brightness(0.9);
+  }
+  100% {
+    transform: scale(1.06) translate3d(1.6%, 1%, 0);
+    filter: saturate(1.05) brightness(0.82);
+  }
+}
+
+.hero-animated-image {
+  position: absolute;
+  inset: 0;
+  background-image: url('https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1600&q=80');
+  background-size: cover;
+  background-position: center;
+  transform-origin: center;
+  animation: heroPanZoom 14s ease-in-out infinite alternate;
+}
+
+.app-shell {
+  background: transparent;
+}
+
+.glass-panel {
+  background: linear-gradient(140deg, rgba(23, 33, 65, 0.82), rgba(20, 26, 52, 0.66));
+  border: 1px solid var(--line-soft);
+  box-shadow: 0 16px 44px rgba(7, 10, 24, 0.46);
+  backdrop-filter: blur(14px);
+}
+
+.search-led {
+  position: relative;
+  border-radius: 999px;
+}
+
+.search-led::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(33, 212, 253, 0.9), rgba(122, 92, 255, 0.88));
+  opacity: 0.55;
+  filter: blur(8px);
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.search-led:focus-within::before {
+  opacity: 1;
+}
+
+.search-led > div {
+  position: relative;
+  z-index: 1;
+}
+
+.search-led-input {
+  background: linear-gradient(130deg, rgba(16, 25, 50, 0.96), rgba(17, 22, 44, 0.96));
+  border: 1px solid rgba(100, 132, 220, 0.42);
+}
+
+.player-shell {
+  background: linear-gradient(130deg, rgba(12, 16, 32, 0.95), rgba(10, 13, 27, 0.95));
+  border-top: 1px solid rgba(95, 118, 201, 0.38);
+  box-shadow: 0 -10px 40px rgba(6, 10, 24, 0.65);
 }
