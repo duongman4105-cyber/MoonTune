@@ -6,11 +6,11 @@ import { api } from '../utils/api';
 
 const SongCard = memo(({ song, size = 'md' }) => {
   const { playSong, songList } = usePlayer();
-  const cardSize = size === 'md' ? 'w-48' : 'w-40';
+  const cardSize = size === 'md' ? 'w-full' : 'w-full';
   const imgSize = size === 'md' ? 'h-48' : 'h-40';
 
   return (
-    <div className={`flex-shrink-0 ${cardSize}`}>
+    <div className={`min-w-0 ${cardSize}`}>
       <div
         className="block group relative cursor-pointer"
         onClick={() => playSong(song, songList)}
@@ -20,9 +20,9 @@ const SongCard = memo(({ song, size = 'md' }) => {
           <FaPlay className="text-white text-4xl opacity-0 group-hover:opacity-100 transform group-hover:scale-110 transition-all duration-300" />
         </div>
       </div>
-      <div className="mt-3">
-        <Link to={`/song/${song._id}`} className="text-base font-semibold text-white truncate hover:underline">{song.title}</Link>
-        <p className="text-sm text-gray-400 truncate">{song.artist}</p>
+      <div className="mt-3 space-y-1 min-w-0">
+        <Link to={`/song/${song._id}`} className="block text-base font-semibold leading-6 text-white break-words whitespace-normal hover:underline">{song.title}</Link>
+        <p className="text-sm leading-5 text-gray-400 break-words whitespace-normal">{song.artist}</p>
       </div>
     </div>
   );
