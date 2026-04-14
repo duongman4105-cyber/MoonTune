@@ -3,6 +3,8 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'SECRET_KEY_123';
+
 // REGISTER
 router.post('/register', async (req, res) => {
   try {
@@ -65,12 +67,13 @@ router.post('/login', async (req, res) => {
     const validPassword = await bcrypt.compare(req.body.password, user.password);
     if (!validPassword) return res.status(400).json("Wrong password");
 
-    const token = jwt.sign({ id: user._id, isAdmin: !!user.isAdmin }, "SECRET_KEY_123", { expiresIn: "5d" });
+    const token = jwt.sign({ id: user._id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: "5d" });
     const { password, ...others } = user._doc;
     
     res.status(200).json({ ...others, token });
   } catch (err) {
-    res.status(500).json(err);
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: err.message || 'Login failed' });
   }
 });
 
@@ -85,12 +88,13 @@ router.post('/admin/login', async (req, res) => {
     const validPassword = await bcrypt.compare(req.body.password, user.password);
     if (!validPassword) return res.status(400).json('Wrong password');
 
-    const token = jwt.sign({ id: user._id, isAdmin: true }, 'SECRET_KEY_123', { expiresIn: '5d' });
+    const token = jwt.sign({ id: user._id, isAdmin: true }, JWT_SECRET, { expiresIn: '5d' });
     const { password, ...others } = user._doc;
 
     res.status(200).json({ ...others, token, isAdmin: true });
   } catch (err) {
-    res.status(500).json(err);
+    console.error('Admin login error:', err.message);
+    res.status(500).json({ error: err.message || 'Admin login failed' });
   }
 });
 
