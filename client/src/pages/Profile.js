@@ -441,7 +441,7 @@ const Profile = () => {
     return <div className="py-16 text-center text-slate-300">Đang tải hồ sơ...</div>;
   }
 
-  const profileAvatar = profileData?.avatar || user?.avatar || DEFAULT_USER_AVATAR;
+  const profileAvatar = profileData?.avatar || DEFAULT_USER_AVATAR;
   const profileCover = profileData?.coverImage || DEFAULT_COVER;
 
   return (
