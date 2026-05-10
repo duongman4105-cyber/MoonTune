@@ -110,9 +110,9 @@ const Sidebar = ({ isOpen, onClose }) => {
             )}
             <aside 
                 ref={sidebarRef} 
-                className={`glass-panel pointer-events-auto fixed inset-y-0 left-0 z-[9999] w-[280px] flex-col px-5 pb-6 pt-5 isolate transition-all duration-300 lg:flex hidden lg:translate-x-0 ${
-                    isOpen ? 'translate-x-0 flex' : '-translate-x-full'
-                }`}
+                className={`glass-panel pointer-events-auto fixed inset-y-0 left-0 z-[9999] w-[280px] flex-col px-5 pb-6 pt-5 isolate transition-all duration-300 flex ${
+                    isOpen ? 'translate-x-0' : '-translate-x-full'
+                } lg:translate-x-0`}
             >
                 <div className="flex items-center justify-between mb-4">
                     <div></div>
