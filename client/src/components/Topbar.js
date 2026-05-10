@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { HiOutlineSearch, HiOutlineBell, HiOutlineMenu, HiOutlineX } from 'react-icons/hi';
+import { HiOutlineSearch, HiOutlineBell, HiOutlineMenu } from 'react-icons/hi';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
