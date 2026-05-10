@@ -44,7 +44,8 @@ npx tailwindcss init -p
 
 ## 4. Cách chạy
 - Terminal 1 (Server): `cd server && npm run dev` (hoặc `node index.js`)
-- Terminal 2 (Client): `cd client && npm start`
+- Terminal 2 (Client): `cd client && npm run dev
+`
 
 ## 5. Hướng dẫn Deploy (Miễn phí)
 

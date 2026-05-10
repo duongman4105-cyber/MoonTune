@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
     HiHome, HiOutlineMusicNote, HiOutlineHeart, 
-    HiOutlineUpload, HiOutlineUser, HiOutlineShieldCheck
+    HiOutlineUpload, HiOutlineUser, HiOutlineShieldCheck, HiOutlineX
 } from 'react-icons/hi';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import { api } from '../utils/api';
 import { APP_LOGO_URL, DEFAULT_USER_AVATAR } from '../utils/defaults';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
     const { user } = useAuth();
     const { playSong } = usePlayer();
     const location = useLocation();
@@ -31,7 +31,10 @@ const Sidebar = () => {
     const NavItem = ({ item }) => (
         <button
             type="button"
-            onClick={() => navigate(item.path)}
+            onClick={() => {
+                navigate(item.path);
+                onClose();
+            }}
             data-sidebar-nav="true"
             data-sidebar-path={item.path}
             className={`relative z-[10000] flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
@@ -98,8 +101,31 @@ const Sidebar = () => {
     }, [location.pathname, navigate]);
 
     return (
-        <aside ref={sidebarRef} className="glass-panel pointer-events-auto fixed inset-y-0 left-0 z-[9999] hidden w-[280px] flex-col px-5 pb-6 pt-5 lg:flex isolate">
-            <Link to="/" className="mb-6 flex items-center gap-3 rounded-2xl border border-violet-300/20 bg-white/5 p-3">
+        <>
+            {isOpen && (
+                <div
+                    className="fixed inset-0 z-[9998] bg-black/40 lg:hidden"
+                    onClick={onClose}
+                />
+            )}
+            <aside 
+                ref={sidebarRef} 
+                className={`glass-panel pointer-events-auto fixed inset-y-0 left-0 z-[9999] w-[280px] flex-col px-5 pb-6 pt-5 isolate transition-all duration-300 lg:flex hidden lg:translate-x-0 ${
+                    isOpen ? 'translate-x-0 flex' : '-translate-x-full'
+                }`}
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <div></div>
+                    <button
+                        onClick={onClose}
+                        className="lg:hidden flex-shrink-0 rounded-lg border border-blue-300/20 bg-white/5 p-2 text-slate-300 transition hover:text-cyan-200"
+                        title="Close menu"
+                    >
+                        <HiOutlineX className="text-xl" />
+                    </button>
+                </div>
+
+                <Link to="/" className="mb-6 flex items-center gap-3 rounded-2xl border border-violet-300/20 bg-white/5 p-3">
                 <img
                     src={APP_LOGO_URL}
                     alt="MOONTUNE logo"
@@ -186,9 +212,10 @@ const Sidebar = () => {
                 <p className="text-sm text-slate-200">Nâng cấp tài khoản để mở toàn bộ hiệu ứng visualizer.</p>
                 <button className="mt-3 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#15214a] transition hover:bg-cyan-100">
                     Xem gói Premium
-                    </button>
+                </button>
             </div>
-        </aside>
+            </aside>
+        </>
     );
 };
 

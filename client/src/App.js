@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/AuthContext';
@@ -77,6 +77,7 @@ const ProtectedRoute = ({ children, title, description }) => {
 
 const AppContent = () => {
   const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/admin/login';
 
   if (isAuthPage) {
@@ -94,9 +95,9 @@ const AppContent = () => {
   return (
     <Suspense fallback={<AppLoader />}>
       <div className="app-shell min-h-screen text-slate-100">
-        <Sidebar />
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="lg:ml-[280px]">
-          <Topbar />
+          <Topbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
           <main className="px-4 pb-32 pt-24 sm:px-6 lg:px-10">
             <Routes>
               <Route path="/" element={<Home />} />

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { HiOutlineSearch, HiOutlineBell } from 'react-icons/hi';
+import { HiOutlineSearch, HiOutlineBell, HiOutlineMenu, HiOutlineX } from 'react-icons/hi';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../utils/api';
 import { DEFAULT_USER_AVATAR } from '../utils/defaults';
 
-const Topbar = () => {
+const Topbar = ({ onToggleSidebar }) => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const authToken = user?.token || user?.accessToken;
@@ -144,6 +144,14 @@ const Topbar = () => {
     return (
         <header className="fixed left-0 right-0 top-0 z-30 border-b border-blue-400/20 bg-[#0e1430]/75 backdrop-blur-xl lg:left-[280px]">
             <div className="flex h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+                <button
+                    onClick={onToggleSidebar}
+                    className="lg:hidden flex-shrink-0 rounded-lg border border-blue-300/20 bg-white/5 p-2.5 text-slate-300 transition hover:text-cyan-200"
+                    title="Toggle menu"
+                >
+                    <HiOutlineMenu className="text-2xl" />
+                </button>
+
                 <div className="search-led w-full max-w-2xl">
                     <form onSubmit={handleSearchSubmit} className="relative" ref={searchRef}>
                         <HiOutlineSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-300 text-xl" />
