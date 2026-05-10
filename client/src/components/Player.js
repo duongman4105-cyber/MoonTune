@@ -265,39 +265,47 @@ const Player = () => {
       />
 
       {/* Mobile Mini Player */}
-      <div className="md:hidden flex flex-col gap-2">
-        {/* Song Info + Controls */}
-        <div className="flex items-center gap-2">
+      <div className="md:hidden flex flex-col gap-3 py-1">
+        {/* Song Info Row */}
+        <div className="flex items-center gap-3">
           <Link to={`/song/${currentSong._id}`} className="flex-shrink-0">
-            <img src={cover} alt={currentSong.title} className="h-12 w-12 rounded-lg object-cover shadow-md" />
+            <img src={cover} alt={currentSong.title} className="h-16 w-16 rounded-lg object-cover shadow-md" />
           </Link>
 
           <div className="min-w-0 flex-1">
-            <Link to={`/song/${currentSong._id}`} className="block truncate text-sm font-bold text-white hover:text-cyan-200">
+            <Link to={`/song/${currentSong._id}`} className="block truncate text-base font-bold text-white hover:text-cyan-200">
               {currentSong.title}
             </Link>
-            <p className="truncate text-xs text-slate-400">{currentSong.artist || 'Unknown artist'}</p>
+            <p className="truncate text-sm text-slate-400">{currentSong.artist || 'Unknown artist'}</p>
           </div>
 
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={playPrev} className="p-1.5 text-slate-300 hover:text-white transition">
-              <FaStepBackward size={14} />
-            </button>
-
-            <button
-              onClick={togglePlay}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-[#0c1533] transition hover:scale-105"
-            >
-              {isPlaying ? <FaPause size={12} /> : <FaPlay size={12} className="ml-0.5" />}
-            </button>
-
-            <button onClick={playNext} className="p-1.5 text-slate-300 hover:text-white transition">
-              <FaStepForward size={14} />
-            </button>
-          </div>
+          <button
+            onClick={handleLike}
+            className={`flex-shrink-0 p-2 transition ${isLiked ? 'text-rose-400' : 'text-slate-400 hover:text-rose-400'}`}
+          >
+            <FaHeart size={18} />
+          </button>
         </div>
 
-        {/* Progress Bar Mobile */}
+        {/* Controls Row */}
+        <div className="flex items-center justify-center gap-4">
+          <button onClick={playPrev} className="p-2 text-slate-300 hover:text-white transition">
+            <FaStepBackward size={16} />
+          </button>
+
+          <button
+            onClick={togglePlay}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-[#0c1533] transition hover:scale-110"
+          >
+            {isPlaying ? <FaPause size={14} /> : <FaPlay size={14} className="ml-0.5" />}
+          </button>
+
+          <button onClick={playNext} className="p-2 text-slate-300 hover:text-white transition">
+            <FaStepForward size={16} />
+          </button>
+        </div>
+
+        {/* Progress Bar */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 w-8 text-right">{formatTime(currentTime)}</span>
           <div className="group relative flex-1">
@@ -309,11 +317,12 @@ const Player = () => {
               onChange={handleSeek}
               className="absolute inset-0 z-20 h-2 w-full cursor-pointer opacity-0"
             />
-            <div className="h-1 rounded-full bg-slate-700/70">
+            <div className="h-1.5 rounded-full bg-slate-700/70">
               <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500" style={{ width: `${progress}%` }} />
             </div>
+            <div className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-white/80 bg-white opacity-0 transition group-hover:opacity-100" style={{ left: `calc(${progress}% - 6px)` }} />
           </div>
-          <span className="text-xs text-slate-400 w-8">{formatTime(duration)}</span>
+          <span className="text-xs text-slate-400 w-8 text-left">{formatTime(duration)}</span>
         </div>
       </div>
 
