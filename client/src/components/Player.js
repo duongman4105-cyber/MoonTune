@@ -255,7 +255,7 @@ const Player = () => {
   if (!currentSong) return null;
 
   return (
-    <div className="player-shell fixed bottom-0 left-0 right-0 z-50 h-[96px] border-t border-white/10 px-3 py-2 text-white md:h-[106px] md:px-5 lg:left-[280px] lg:px-8">
+    <div className="player-shell fixed bottom-0 left-0 right-0 z-50 h-auto md:h-[106px] border-t border-white/10 px-3 py-2 text-white md:px-5 lg:left-[280px] lg:px-8">
       <audio
         ref={audioRef}
         src={audioSource}
@@ -264,8 +264,62 @@ const Player = () => {
         onLoadedMetadata={handleLoadedMetadata}
       />
 
-      <div className="flex h-full items-center gap-3 md:gap-5">
-        <div className="min-w-0 flex w-[36%] items-center gap-3 md:w-[30%]">
+      {/* Mobile Mini Player */}
+      <div className="md:hidden flex flex-col gap-2">
+        {/* Song Info + Controls */}
+        <div className="flex items-center gap-2">
+          <Link to={`/song/${currentSong._id}`} className="flex-shrink-0">
+            <img src={cover} alt={currentSong.title} className="h-12 w-12 rounded-lg object-cover shadow-md" />
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <Link to={`/song/${currentSong._id}`} className="block truncate text-sm font-bold text-white hover:text-cyan-200">
+              {currentSong.title}
+            </Link>
+            <p className="truncate text-xs text-slate-400">{currentSong.artist || 'Unknown artist'}</p>
+          </div>
+
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={playPrev} className="p-1.5 text-slate-300 hover:text-white transition">
+              <FaStepBackward size={14} />
+            </button>
+
+            <button
+              onClick={togglePlay}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 text-[#0c1533] transition hover:scale-105"
+            >
+              {isPlaying ? <FaPause size={12} /> : <FaPlay size={12} className="ml-0.5" />}
+            </button>
+
+            <button onClick={playNext} className="p-1.5 text-slate-300 hover:text-white transition">
+              <FaStepForward size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Progress Bar Mobile */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 w-8 text-right">{formatTime(currentTime)}</span>
+          <div className="group relative flex-1">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={progress}
+              onChange={handleSeek}
+              className="absolute inset-0 z-20 h-2 w-full cursor-pointer opacity-0"
+            />
+            <div className="h-1 rounded-full bg-slate-700/70">
+              <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-500" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 w-8">{formatTime(duration)}</span>
+        </div>
+      </div>
+
+      {/* Desktop Player */}
+      <div className="hidden md:flex h-full items-center gap-5">
+        <div className="min-w-0 flex w-[30%] items-center gap-3">
           <Link to={`/song/${currentSong._id}`}>
             <img src={cover} alt={currentSong.title} className="h-12 w-12 rounded-xl object-cover shadow-lg md:h-14 md:w-14" />
           </Link>
@@ -358,6 +412,7 @@ const Player = () => {
           />
         </div>
       </div>
+      {/* End Desktop Player */}
 
       {showQueue && (
         <div className="animate-fade-in-up absolute bottom-[110%] right-3 w-80 max-h-[420px] overflow-y-auto rounded-2xl border border-blue-300/25 bg-[#10182f]/95 p-4 shadow-2xl md:right-5 lg:right-8">
@@ -393,10 +448,6 @@ const Player = () => {
           </div>
         </div>
       )}
-
-      <div className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-slate-700/70 md:hidden">
-        <div className="h-full bg-gradient-to-r from-cyan-400 to-violet-500" style={{ width: `${progress}%` }} />
-      </div>
     </div>
   );
 };
