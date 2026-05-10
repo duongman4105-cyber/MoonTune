@@ -13,6 +13,8 @@ import {
   FaHeart,
   FaList,
   FaTimes,
+  FaBackward,
+  FaForward,
 } from 'react-icons/fa';
 import { usePlayer } from '../context/PlayerContext';
 import { useAuth } from '../context/AuthContext';
@@ -248,6 +250,20 @@ const Player = () => {
       ? <FaVolumeDown size={16} />
       : <FaVolumeUp size={16} />;
 
+  const handleRewind = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.max(0, currentTime - 10);
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleForward = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.min(duration, currentTime + 10);
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
   const cover = currentSong?.coverImage || currentSong?.thumbnail || 'https://via.placeholder.com/80';
   const audioSource = currentSong?.audioUrl || currentSong?.fileUrl || currentSong?.songUrl || '';
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -288,7 +304,12 @@ const Player = () => {
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={handleRewind} className="p-2 text-slate-300 hover:text-white transition group relative" title="Rewind 10s">
+            <FaBackward size={14} />
+            <span className="absolute -top-6 text-xs bg-slate-800 px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none">-10s</span>
+          </button>
+
           <button onClick={playPrev} className="p-2 text-slate-300 hover:text-white transition">
             <FaStepBackward size={16} />
           </button>
@@ -303,9 +324,11 @@ const Player = () => {
           <button onClick={playNext} className="p-2 text-slate-300 hover:text-white transition">
             <FaStepForward size={16} />
           </button>
-        </div>
 
-        {/* Progress Bar */}
+            <button onClick={handleForward} className="p-2 text-slate-300 hover:text-white transition group relative" title="Forward 10s">
+              <FaForward size={14} />
+              <span className="absolute -top-6 text-xs bg-slate-800 px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none">+10s</span>
+            </button>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 w-8 text-right">{formatTime(currentTime)}</span>
           <div className="group relative flex-1">
@@ -354,6 +377,9 @@ const Player = () => {
             <button onClick={toggleShuffle} className={`hidden md:inline-flex transition ${isShuffling ? 'text-cyan-300' : 'text-slate-400 hover:text-white'}`}>
               <FaRandom size={15} />
             </button>
+            <button onClick={handleRewind} className="text-slate-300 transition hover:text-white" title="Rewind 10s">
+              <FaBackward size={14} />
+            </button>
             <button onClick={playPrev} className="text-slate-300 transition hover:text-white">
               <FaStepBackward size={16} />
             </button>
@@ -367,6 +393,9 @@ const Player = () => {
 
             <button onClick={playNext} className="text-slate-300 transition hover:text-white">
               <FaStepForward size={16} />
+            </button>
+            <button onClick={handleForward} className="text-slate-300 transition hover:text-white" title="Forward 10s">
+              <FaForward size={14} />
             </button>
             <button onClick={toggleLoop} className={`hidden md:inline-flex transition ${isLooping ? 'text-cyan-300' : 'text-slate-400 hover:text-white'}`}>
               <FaRedo size={15} />
