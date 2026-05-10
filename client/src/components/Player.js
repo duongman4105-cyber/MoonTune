@@ -325,10 +325,13 @@ const Player = () => {
             <FaStepForward size={16} />
           </button>
 
-            <button onClick={handleForward} className="p-2 text-slate-300 hover:text-white transition group relative" title="Forward 10s">
-              <FaForward size={14} />
-              <span className="absolute -top-6 text-xs bg-slate-800 px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none">+10s</span>
-            </button>
+          <button onClick={handleForward} className="p-2 text-slate-300 hover:text-white transition group relative" title="Forward 10s">
+            <FaForward size={14} />
+            <span className="absolute -top-6 text-xs bg-slate-800 px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none">+10s</span>
+          </button>
+        </div>
+
+        {/* Progress Bar */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 w-8 text-right">{formatTime(currentTime)}</span>
           <div className="group relative flex-1">
