@@ -143,7 +143,7 @@ const Topbar = ({ onToggleSidebar }) => {
 
     return (
         <header className="fixed left-0 right-0 top-0 z-30 border-b border-blue-400/20 bg-[#0e1430]/75 backdrop-blur-xl lg:left-[280px]">
-            <div className="flex h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+            <div className="flex h-20 items-center justify-between gap-2 sm:gap-4 px-4 sm:px-6 lg:px-10">
                 <button
                     onClick={onToggleSidebar}
                     className="lg:hidden flex-shrink-0 rounded-lg border border-blue-300/20 bg-white/5 p-2.5 text-slate-300 transition hover:text-cyan-200"
@@ -152,7 +152,7 @@ const Topbar = ({ onToggleSidebar }) => {
                     <HiOutlineMenu className="text-2xl" />
                 </button>
 
-                <div className="search-led w-full max-w-2xl">
+                <div className="search-led w-full max-w-sm sm:max-w-2xl">
                     <form onSubmit={handleSearchSubmit} className="relative" ref={searchRef}>
                         <HiOutlineSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-cyan-300 text-xl" />
                         <input
@@ -284,14 +284,14 @@ const Topbar = ({ onToggleSidebar }) => {
                     )}
 
                     {user ? (
-                        <div className="relative group">
-                            <Link to="/profile" className="flex items-center gap-2 rounded-full border border-violet-300/30 bg-white/5 px-2 py-1.5 pr-3 text-sm text-slate-100 transition hover:border-cyan-300/50">
+                        <div className="relative group flex-shrink-0">
+                            <Link to="/profile" className="flex items-center gap-2 rounded-full border border-violet-300/30 bg-white/5 px-2 py-1.5 pr-3 text-sm text-slate-100 transition hover:border-cyan-300/50 whitespace-nowrap">
                                 <img
                                     src={user.avatar || DEFAULT_USER_AVATAR}
                                     alt="User Avatar"
-                                    className="h-8 w-8 rounded-full object-cover"
+                                    className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
                                 />
-                                <span className="hidden max-w-[120px] truncate sm:block">{user.username}</span>
+                                <span className="hidden max-w-[100px] truncate sm:block">{user.username}</span>
                             </Link>
                             <div className="invisible absolute right-0 mt-2 w-48 rounded-xl border border-blue-300/25 bg-[#121b36]/95 py-2 opacity-0 shadow-xl transition-all duration-200 group-hover:visible group-hover:opacity-100">
                                 <Link to="/profile" className="block px-4 py-2 text-sm text-slate-300 hover:bg-white/5">Trang cá nhân</Link>
@@ -303,11 +303,11 @@ const Topbar = ({ onToggleSidebar }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2">
-                            <Link to="/login" className="rounded-full border border-blue-300/30 px-4 py-2 text-sm font-semibold text-slate-200 hover:border-cyan-300/50">
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <Link to="/login" className="rounded-full border border-blue-300/30 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-slate-200 hover:border-cyan-300/50 whitespace-nowrap">
                                 Đăng nhập
                             </Link>
-                            <Link to="/register" className="rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-cyan-900/50">
+                            <Link to="/register" className="rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-bold text-slate-900 shadow-lg shadow-cyan-900/50 whitespace-nowrap">
                                 Đăng ký
                             </Link>
                         </div>
